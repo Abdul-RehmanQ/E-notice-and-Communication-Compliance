@@ -1,0 +1,182 @@
+JS Functions Overview for FYP Project
+====================================
+
+File: index.html
+----------------
+- (No custom JS functions) – Only Bootstrap bundle is loaded; the page is a simple student login form with no scripted behavior.
+
+File: student/dashboard.html
+----------------------------
+- logout-btn click handler
+  - Location: inline <script> at bottom of file.
+  - Behavior: On click, redirects the student back to ../index.html (logout prototype).
+
+File: student/community.html
+----------------------------
+- logout-btn click handler
+  - Redirects the student back to ../index.html (logout prototype).
+
+- includeText change handler
+  - Toggles visibility of the textSection textarea in the "Add Post" modal based on whether "Write Something" is checked.
+
+- includeImage change handler
+  - Toggles visibility of the imageSection in the "Add Post" modal and clears image input/preview when unchecked.
+
+- postImage change handler
+  - Validates selected file type and size (must be an image under 5MB).
+  - Uses FileReader to show a preview image inside imagePreview.
+
+- removeImage click handler
+  - Clears the selected image file and hides the preview area.
+
+- submitPost click handler
+  - Validates that at least one of text/image is selected, that text is non-empty if chosen, and that an image file is chosen if image is selected.
+  - Logs the post data (text + image name) to the console and shows a success alert.
+  - Resets the "Add Post" form and hides the modal (front-end only, no backend).
+
+- addPostModal hidden.bs.modal handler
+  - Resets the "Add Post" form and UI state when the modal is closed.
+
+- selectPostToDelete change handler
+  - When a post is selected in the "Delete Post" modal's dropdown, shows a confirmation section with a preview of the selected option text and enables the delete button; hides and disables if no selection.
+
+- confirmDeletePost click handler
+  - Logs the selected post ID and text to the console.
+  - Shows a success alert and resets/ hides the delete modal (prototype only, does not actually remove list items).
+
+- deletePostModal hidden.bs.modal handler
+  - Resets the select element, hides the confirmation section, and disables the delete button when the delete modal is closed.
+
+File: student/settings.html
+---------------------------
+- logout-btn click handler
+  - Redirects the student back to ../index.html (logout prototype).
+
+File: teacher/login.html
+------------------------
+- teacher-login-form submit handler
+  - Prevents default form submission.
+  - Redirects to teacher/dashboard.html (teacher login prototype, no real authentication).
+
+File: teacher/dashboard.html
+----------------------------
+- show-add-form button click handler
+  - Shows the "Add Notification" card and scrolls to it smoothly.
+
+- cancel-add button click handler
+  - Calls resetForm() and hides the "Add Notification" card.
+
+- includeText change handler
+  - Toggles visibility of the textSection textarea depending on the checkbox state.
+
+- includeImage change handler
+  - Shows or hides the imageSection.
+  - Clears image input and preview when unchecked.
+
+- imageInput change handler
+  - Validates that the selected file is an image and <= 5MB.
+  - Uses FileReader to preview the image inside imagePreview.
+
+- removeImage click handler
+  - Clears the selected image and hides the preview area.
+
+- addForm submit handler (Add Notification)
+  - Validates session, department, semester, and section fields are filled.
+  - Validates that at least one of text/image is selected and that the corresponding content exists.
+  - Builds a payload object for the new notification and logs it.
+  - Removes the "no notifications" info alert on first notification.
+  - Creates a new card with notification details and prepends it to notification-list.
+  - Generates a unique notificationId and stores it in card.dataset.notificationId for later deletion.
+  - Shows a success alert and resets/hides the add form (front-end only).
+
+- resetForm function
+  - Resets the add-notification form fields.
+  - Restores default state of includeText/includeImage and text/image sections.
+  - Clears image input and preview.
+
+- showDeleteModalBtn click handler (Delete Notification button)
+  - Collects all existing notification cards.
+  - If none exist, shows an alert and returns.
+  - Populates the selectNotificationToDelete dropdown with options representing each notification (using the first non-muted paragraph text as a short label).
+  - Opens the deleteNotificationModal (prototype-only UI).
+
+- selectNotificationToDelete change handler
+  - Enables or disables the confirmDeleteNotification button depending on whether an option is selected.
+
+- confirmDeleteNotificationBtn click handler
+  - Finds the card whose data-notification-id matches the selected option.
+  - Removes that notification card from notification-list.
+  - If no cards remain, restores the "no notifications" info alert.
+  - Hides the deleteNotificationModal (front-end only, no backend).
+
+- logout-btn click handler
+  - Redirects back to ../index.html (teacher logout prototype).
+
+File: teacher/community.html
+----------------------------
+- showPostFormBtn click handler
+  - Shows the "Add Post" card and scrolls to it smoothly.
+
+- cancelPostBtn click handler
+  - Calls resetForm() and hides the "Add Post" card.
+
+- includeText change handler
+  - Toggles visibility of the textSection textarea depending on the checkbox state.
+
+- includeImage change handler
+  - Shows or hides the imageSection.
+  - Clears the image input and preview when unchecked.
+
+- imageInput change handler
+  - Validates that the selected file is an image and <= 5MB.
+  - Uses FileReader to preview the image in imagePreview.
+
+- removeImageBtn click handler
+  - Clears the selected image and hides the preview area.
+
+- addPostForm submit handler (Add Community Post)
+  - Determines scope from radio buttons: "all" vs "department".
+  - Validates that at least one of text/image is selected and that corresponding content exists.
+  - Builds a payload object for the new community post and logs it.
+  - Removes the "no posts" info alert on first post.
+  - Creates a new post card with target info ("To: All University" or "To: Your Department"), message text, and optional image name.
+  - Generates a unique postId and stores it in card.dataset.postId for later deletion.
+  - Prepends the new post card to posts-list.
+  - Shows a success alert and resets/hides the add form (front-end only).
+
+- showDeletePostModalBtn click handler (Delete Post button)
+  - Collects all existing post cards.
+  - If none exist, shows an alert and returns.
+  - Populates the selectPostToDelete dropdown with options representing each post (using the first non-muted paragraph text as a short label).
+  - Opens the deletePostModal (prototype-only UI).
+
+- selectPostToDelete change handler
+  - Enables or disables the confirmDeletePost button depending on whether a post is selected.
+
+- confirmDeletePostBtn click handler
+  - Finds the card whose data-post-id matches the selected option.
+  - Removes that post card from posts-list.
+  - If no cards remain, restores the "no posts" info alert.
+  - Hides the deletePostModal (front-end only, no backend).
+
+- resetForm function
+  - Resets the add-post form fields.
+  - Restores default state of includeText/includeImage and text/image sections.
+  - Clears image input and preview.
+
+- logout-btn click handler
+  - Redirects back to ../index.html (teacher logout prototype).
+
+File: teacher/settings.html
+---------------------------
+- password-form submit handler
+  - Prevents default submission.
+  - Validates that newPassword and repeatNewPassword match.
+  - Logs the password update request and shows a prototype-only alert, then resets the form.
+
+- email-form submit handler
+  - Prevents default submission.
+  - Logs the entered forwarding email and shows a prototype-only alert.
+
+- logout-btn click handler
+  - Redirects back to ../index.html (teacher logout prototype).
