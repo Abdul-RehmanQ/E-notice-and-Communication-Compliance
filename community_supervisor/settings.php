@@ -104,12 +104,12 @@
                         data-bs-target="#sidebar"></button>
                 </div>
                 <div class="offcanvas-body d-flex flex-column p-3">
-                    <h4 class="mb-4"><a href="dashboard.html" class="text-white text-decoration-none">Supervisor
+                    <h4 class="mb-4"><a href="dashboard.php" class="text-white text-decoration-none">Supervisor
                             Panel</a></h4>
                     <nav class="nav flex-column">
-                        <a class="nav-link text-white mb-2" href="dashboard.html"><i
+                        <a class="nav-link text-white mb-2" href="dashboard.php"><i
                                 class="fas fa-tachometer-alt me-2"></i>Dashboard</a>
-                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="settings.html"><i
+                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="settings.php"><i
                                 class="fas fa-cog me-2"></i>Settings</a>
                         <button class="nav-link btn btn-link text-white text-start mb-2" id="logout-btn"><i
                                 class="fas fa-sign-out-alt me-2"></i>Log out</button>
@@ -388,7 +388,7 @@
     <script>
         // Logout functionality
         document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../index.html';
+            window.location.href = '../index.php';
         });
 
         // Toggle password visibility

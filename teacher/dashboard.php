@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Community - Teacher Dashboard</title>
+    <title>Teacher Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
@@ -42,6 +42,11 @@
                 padding-left: 1rem;
                 padding-right: 1rem;
             }
+
+            .row.g-3 .col-md-3 {
+                flex: 0 0 auto;
+                width: 50%;
+            }
         }
     </style>
 </head>
@@ -70,7 +75,7 @@
 
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar -->
+            <!-- Sidebar - Offcanvas on mobile, fixed on desktop -->
             <div class="offcanvas-lg offcanvas-start bg-dark text-white" tabindex="-1" id="sidebar"
                 style="width: 250px; height: 100vh;">
                 <div class="offcanvas-header">
@@ -79,14 +84,14 @@
                         data-bs-target="#sidebar"></button>
                 </div>
                 <div class="offcanvas-body d-flex flex-column p-3">
-                    <h4 class="mb-4"><a href="dashboard.html" class="text-white text-decoration-none">Teacher
+                    <h4 class="mb-4"><a href="dashboard.php" class="text-white text-decoration-none">Teacher
                             Dashboard</a></h4>
                     <nav class="nav flex-column">
-                        <a class="nav-link text-white mb-2" href="dashboard.html"><i
+                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="dashboard.php"><i
                                 class="fas fa-bell me-2"></i>Notifications</a>
-                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="community.html"><i
+                        <a class="nav-link text-white mb-2" href="community.php"><i
                                 class="fas fa-users me-2"></i>Community</a>
-                        <a class="nav-link text-white mb-2" href="settings.html"><i
+                        <a class="nav-link text-white mb-2" href="settings.php"><i
                                 class="fas fa-cog me-2"></i>Settings</a>
                         <button class="nav-link btn btn-link text-white text-start mb-2" id="logout-btn"><i
                                 class="fas fa-sign-out-alt me-2"></i>Log out</button>
@@ -98,40 +103,61 @@
             <main class="col-lg-9 col-xl-10 ms-lg-auto px-md-4">
                 <div class="container py-4">
                     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-                        <h2 class="mb-0">Community</h2>
+                        <h2 class="mb-0">Notifications</h2>
                         <div class="d-flex flex-column flex-sm-row gap-2">
-                            <button class="btn btn-success" id="show-post-form">
-                                <i class="fas fa-plus me-1"></i>Add New Post
+                            <button class="btn btn-success" id="show-add-form">
+                                <i class="fas fa-plus me-1"></i>Add New Notification
                             </button>
-                            <button class="btn btn-danger" id="show-delete-post-modal">
-                                <i class="fas fa-trash me-1"></i>Delete Post
+                            <button class="btn btn-danger" id="show-delete-modal">
+                                <i class="fas fa-trash me-1"></i>Delete Notification
                             </button>
                         </div>
                     </div>
 
-                    <!-- Add Post Form -->
-                    <div class="card mb-4 d-none" id="add-post-card">
+                    <!-- Add Notification Form -->
+                    <div class="card mb-4 d-none" id="add-notification-card">
                         <div class="card-header">
-                            <h5 class="mb-0">New Community Post</h5>
+                            <h5 class="mb-0">New Notification</h5>
                         </div>
                         <div class="card-body">
-                            <form id="add-post-form">
-                                <div class="mb-3">
-                                    <label class="form-label">Post visibility</label>
-                                    <div class="d-flex flex-wrap gap-3">
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="scope" id="scopeDept"
-                                                value="department" checked>
-                                            <label class="form-check-label" for="scopeDept">Department only</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="scope" id="scopeAll"
-                                                value="all">
-                                            <label class="form-check-label" for="scopeAll">All University</label>
-                                        </div>
+                            <form id="add-notification-form">
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-3">
+                                        <label for="session" class="form-label">Session</label>
+                                        <input type="text" class="form-control" id="session" placeholder="2023-2027"
+                                            required>
                                     </div>
-                                    <div class="form-text">Choose whether this post is limited to your department or
-                                        visible to the whole university.</div>
+                                    <div class="col-md-3">
+                                        <label for="department" class="form-label">Department</label>
+                                        <select class="form-select" id="department" required>
+                                            <option value="" selected disabled>Select department</option>
+                                            <option value="CS">CS</option>
+                                            <option value="IT">IT</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="semester" class="form-label">Semester</label>
+                                        <select class="form-select" id="semester" required>
+                                            <option value="" selected disabled>Select semester</option>
+                                            <option value="1">1</option>
+                                            <option value="2">2</option>
+                                            <option value="3">3</option>
+                                            <option value="4">4</option>
+                                            <option value="5">5</option>
+                                            <option value="6">6</option>
+                                            <option value="7">7</option>
+                                            <option value="8">8</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="section" class="form-label">Section</label>
+                                        <select class="form-select" id="section" required>
+                                            <option value="" selected disabled>Select section</option>
+                                            <option value="A">A</option>
+                                            <option value="B">B</option>
+                                            <option value="Both">Both Sections</option>
+                                        </select>
+                                    </div>
                                 </div>
 
                                 <div class="mb-3">
@@ -155,7 +181,7 @@
                                 <div class="mb-3" id="textSection">
                                     <label for="message" class="form-label">Message</label>
                                     <textarea class="form-control" id="message" rows="3"
-                                        placeholder="Write your post..."></textarea>
+                                        placeholder="Write your notification..."></textarea>
                                 </div>
 
                                 <div class="mb-3 d-none" id="imageSection">
@@ -172,52 +198,54 @@
                                 </div>
 
                                 <div class="d-flex justify-content-end gap-2">
-                                    <button type="button" class="btn btn-secondary" id="cancel-post">Cancel</button>
+                                    <button type="button" class="btn btn-secondary" id="cancel-add">Cancel</button>
                                     <button type="submit" class="btn btn-success">
-                                        <i class="fas fa-paper-plane me-1"></i>Send for Approval
+                                        <i class="fas fa-paper-plane me-1"></i>Send Notification
                                     </button>
                                 </div>
                             </form>
                         </div>
                     </div>
 
-                    <!-- Community Posts -->
+                    <!-- Notification History -->
                     <div class="card">
                         <div class="card-header">
-                            <h5 class="mb-0">Community Posts</h5>
+                            <h5 class="mb-0">Notification History</h5>
                         </div>
-                        <div class="card-body" id="posts-list">
-                            <div class="alert alert-info" id="no-posts-text">
-                                No posts yet. Click "Add New Post" to create one.
+                        <div class="card-body" id="notification-list">
+                            <div class="alert alert-info" id="no-notifications-text">
+                                No notifications yet. Click "Add New Notification" to create one.
                             </div>
                         </div>
                     </div>
 
-                    <!-- Delete Post Modal (prototype only) -->
-                    <div class="modal fade" id="deletePostModal" tabindex="-1" aria-labelledby="deletePostModalLabel"
-                        aria-hidden="true">
+                    <!-- Delete Notification Modal (prototype only) -->
+                    <div class="modal fade" id="deleteNotificationModal" tabindex="-1"
+                        aria-labelledby="deleteNotificationModalLabel" aria-hidden="true">
                         <div class="modal-dialog">
                             <div class="modal-content">
                                 <div class="modal-header bg-danger text-white">
-                                    <h5 class="modal-title" id="deletePostModalLabel">
-                                        <i class="fas fa-trash-alt me-2"></i>Delete Post
+                                    <h5 class="modal-title" id="deleteNotificationModalLabel">
+                                        <i class="fas fa-trash-alt me-2"></i>Delete Notification
                                     </h5>
                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
                                         aria-label="Close"></button>
                                 </div>
                                 <div class="modal-body">
-                                    <p class="mb-3">Prototype only: in a real system this would send a delete request
-                                        to the backend.</p>
+                                    <p class="mb-3">Prototype only: in a real system this would request deletion from
+                                        the server.</p>
                                     <div class="mb-3">
-                                        <label for="selectPostToDelete" class="form-label fw-bold">Select a post to
-                                            delete:</label>
-                                        <select class="form-select" id="selectPostToDelete"></select>
+                                        <label for="selectNotificationToDelete" class="form-label fw-bold">Select a
+                                            notification to delete:</label>
+                                        <select class="form-select" id="selectNotificationToDelete">
+                                        </select>
                                     </div>
                                 </div>
                                 <div class="modal-footer">
                                     <button type="button" class="btn btn-secondary"
                                         data-bs-dismiss="modal">Cancel</button>
-                                    <button type="button" class="btn btn-danger" id="confirmDeletePost" disabled>
+                                    <button type="button" class="btn btn-danger" id="confirmDeleteNotification"
+                                        disabled>
                                         <i class="fas fa-trash me-1"></i>Delete Selected
                                     </button>
                                 </div>
@@ -231,10 +259,10 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const addCard = document.getElementById('add-post-card');
-        const showPostFormBtn = document.getElementById('show-post-form');
-        const cancelPostBtn = document.getElementById('cancel-post');
-        const addPostForm = document.getElementById('add-post-form');
+        const addCard = document.getElementById('add-notification-card');
+        const showAddFormBtn = document.getElementById('show-add-form');
+        const cancelAddBtn = document.getElementById('cancel-add');
+        const addForm = document.getElementById('add-notification-form');
         const includeText = document.getElementById('includeText');
         const includeImage = document.getElementById('includeImage');
         const textSection = document.getElementById('textSection');
@@ -243,26 +271,26 @@
         const imagePreview = document.getElementById('imagePreview');
         const previewImg = imagePreview ? imagePreview.querySelector('img') : null;
         const removeImageBtn = document.getElementById('removeImage');
-        const postsList = document.getElementById('posts-list');
-        const noPostsText = document.getElementById('no-posts-text');
-        const scopeDept = document.getElementById('scopeDept');
-        const scopeAll = document.getElementById('scopeAll');
-        const showDeletePostModalBtn = document.getElementById('show-delete-post-modal');
-        const selectPostToDelete = document.getElementById('selectPostToDelete');
-        const confirmDeletePostBtn = document.getElementById('confirmDeletePost');
+        const notificationList = document.getElementById('notification-list');
+        const noNotificationsText = document.getElementById('no-notifications-text');
+        const showDeleteModalBtn = document.getElementById('show-delete-modal');
+        const selectNotificationToDelete = document.getElementById('selectNotificationToDelete');
+        const confirmDeleteNotificationBtn = document.getElementById('confirmDeleteNotification');
 
-        let postIdCounter = 1;
+        let notificationIdCounter = 1;
 
-        showPostFormBtn.addEventListener('click', () => {
+        // Show/hide add notification form
+        showAddFormBtn.addEventListener('click', () => {
             addCard.classList.remove('d-none');
             window.scrollTo({ top: addCard.offsetTop - 70, behavior: 'smooth' });
         });
 
-        cancelPostBtn.addEventListener('click', () => {
+        cancelAddBtn.addEventListener('click', () => {
             resetForm();
             addCard.classList.add('d-none');
         });
 
+        // Toggle sections
         includeText.addEventListener('change', () => {
             textSection.classList.toggle('d-none', !includeText.checked);
         });
@@ -276,6 +304,7 @@
             }
         });
 
+        // Image preview
         imageInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) {
@@ -308,12 +337,22 @@
             imagePreview.classList.add('d-none');
         });
 
-        addPostForm.addEventListener('submit', (e) => {
+        // Handle form submit
+        addForm.addEventListener('submit', (e) => {
             e.preventDefault();
 
-            const scope = scopeAll.checked ? 'all' : 'department';
+            const session = document.getElementById('session').value.trim();
+            const department = document.getElementById('department').value;
+            const semester = document.getElementById('semester').value;
+            const section = document.getElementById('section').value;
             const message = document.getElementById('message').value.trim();
             const imageFile = imageInput.files[0] || null;
+
+            // Basic validation
+            if (!session || !department || !semester || !section) {
+                alert('Please fill in session, department, semester and section.');
+                return;
+            }
 
             if (!includeText.checked && !includeImage.checked) {
                 alert('Please choose at least one content type: text or image.');
@@ -321,7 +360,7 @@
             }
 
             if (includeText.checked && !message) {
-                alert('Please write a message for the post.');
+                alert('Please write a message for the notification.');
                 return;
             }
 
@@ -331,33 +370,33 @@
             }
 
             const payload = {
-                scope,
+                session,
+                department,
+                semester,
+                section,
                 text: includeText.checked ? message : null,
                 imageName: includeImage.checked && imageFile ? imageFile.name : null
             };
 
-            console.log('New community post:', payload);
+            console.log('New notification:', payload);
 
-            if (noPostsText) {
-                noPostsText.remove();
+            // Add to notification history
+            if (noNotificationsText) {
+                noNotificationsText.remove();
             }
 
             const card = document.createElement('div');
             card.className = 'card mb-3 shadow-sm';
 
-            const postId = 'p' + postIdCounter++;
-            card.dataset.postId = postId;
+            const notificationId = 'n' + notificationIdCounter++;
+            card.dataset.notificationId = notificationId;
 
             const body = document.createElement('div');
             body.className = 'card-body';
 
             const target = document.createElement('p');
             target.className = 'mb-1 text-muted';
-            if (scope === 'all') {
-                target.textContent = 'To: All University';
-            } else {
-                target.textContent = 'To: Your Department';
-            }
+            target.textContent = `To: Session ${session}, ${department}, Semester ${semester}, Section ${section}`;
 
             if (payload.text) {
                 const textP = document.createElement('p');
@@ -374,76 +413,16 @@
 
             body.appendChild(target);
             card.appendChild(body);
-            postsList.prepend(card);
+            notificationList.prepend(card);
 
-            alert('Post created (front-end only).');
+            alert('Notification created (front-end only).');
 
             resetForm();
             addCard.classList.add('d-none');
         });
 
-        // Open delete post modal with list of posts
-        showDeletePostModalBtn.addEventListener('click', () => {
-            const cards = postsList.querySelectorAll('.card');
-            if (!cards.length) {
-                alert('There are no posts to delete.');
-                return;
-            }
-
-            selectPostToDelete.innerHTML = '';
-
-            const placeholder = document.createElement('option');
-            placeholder.value = '';
-            placeholder.disabled = true;
-            placeholder.selected = true;
-            placeholder.textContent = '-- Choose a post --';
-            selectPostToDelete.appendChild(placeholder);
-
-            cards.forEach((card, index) => {
-                const option = document.createElement('option');
-                option.value = card.dataset.postId;
-
-                const textP = card.querySelector('p:not(.text-muted)');
-                const text = textP ? textP.textContent.trim() : `Post ${index + 1}`;
-                option.textContent = text.length > 60 ? text.slice(0, 60) + '...' : text;
-
-                selectPostToDelete.appendChild(option);
-            });
-
-            confirmDeletePostBtn.disabled = true;
-
-            const modal = new bootstrap.Modal(document.getElementById('deletePostModal'));
-            modal.show();
-        });
-
-        selectPostToDelete.addEventListener('change', () => {
-            confirmDeletePostBtn.disabled = !selectPostToDelete.value;
-        });
-
-        confirmDeletePostBtn.addEventListener('click', () => {
-            const selectedId = selectPostToDelete.value;
-            if (!selectedId) return;
-
-            const card = postsList.querySelector(`.card[data-post-id="${selectedId}"]`);
-            if (card) {
-                card.remove();
-            }
-
-            if (!postsList.querySelector('.card')) {
-                const info = document.createElement('div');
-                info.className = 'alert alert-info';
-                info.id = 'no-posts-text';
-                info.textContent = 'No posts yet. Click "Add New Post" to create one.';
-                postsList.appendChild(info);
-            }
-
-            const modalElement = document.getElementById('deletePostModal');
-            const modal = bootstrap.Modal.getInstance(modalElement) || new bootstrap.Modal(modalElement);
-            modal.hide();
-        });
-
         function resetForm() {
-            addPostForm.reset();
+            addForm.reset();
             includeText.checked = true;
             includeImage.checked = false;
             textSection.classList.remove('d-none');
@@ -452,8 +431,69 @@
             imagePreview.classList.add('d-none');
         }
 
+        // Open delete notification modal with list of notifications
+        showDeleteModalBtn.addEventListener('click', () => {
+            const cards = notificationList.querySelectorAll('.card');
+            if (!cards.length) {
+                alert('There are no notifications to delete.');
+                return;
+            }
+
+            selectNotificationToDelete.innerHTML = '';
+
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.disabled = true;
+            placeholder.selected = true;
+            placeholder.textContent = '-- Choose a notification --';
+            selectNotificationToDelete.appendChild(placeholder);
+
+            cards.forEach((card, index) => {
+                const option = document.createElement('option');
+                option.value = card.dataset.notificationId;
+
+                const textP = card.querySelector('p:not(.text-muted)');
+                const text = textP ? textP.textContent.trim() : `Notification ${index + 1}`;
+                option.textContent = text.length > 60 ? text.slice(0, 60) + '...' : text;
+
+                selectNotificationToDelete.appendChild(option);
+            });
+
+            confirmDeleteNotificationBtn.disabled = true;
+
+            const modal = new bootstrap.Modal(document.getElementById('deleteNotificationModal'));
+            modal.show();
+        });
+
+        selectNotificationToDelete.addEventListener('change', () => {
+            confirmDeleteNotificationBtn.disabled = !selectNotificationToDelete.value;
+        });
+
+        confirmDeleteNotificationBtn.addEventListener('click', () => {
+            const selectedId = selectNotificationToDelete.value;
+            if (!selectedId) return;
+
+            const card = notificationList.querySelector(`.card[data-notification-id="${selectedId}"]`);
+            if (card) {
+                card.remove();
+            }
+
+            if (!notificationList.querySelector('.card')) {
+                const info = document.createElement('div');
+                info.className = 'alert alert-info';
+                info.id = 'no-notifications-text';
+                info.textContent = 'No notifications yet. Click "Add New Notification" to create one.';
+                notificationList.appendChild(info);
+            }
+
+            const modalElement = document.getElementById('deleteNotificationModal');
+            const modal = bootstrap.Modal.getInstance(modalElement) || new bootstrap.Modal(modalElement);
+            modal.hide();
+        });
+
+        // Logout back to main index
         document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../index.html';
+            window.location.href = '../index.php';
         });
     </script>
 </body>

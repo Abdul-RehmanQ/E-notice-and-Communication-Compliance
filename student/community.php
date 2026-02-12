@@ -92,14 +92,14 @@
                         data-bs-target="#sidebar"></button>
                 </div>
                 <div class="offcanvas-body d-flex flex-column p-3">
-                    <h4 class="mb-4"><a href="dashboard.html" class="text-white text-decoration-none">Student
+                    <h4 class="mb-4"><a href="dashboard.php" class="text-white text-decoration-none">Student
                             Dashboard</a></h4>
                     <nav class="nav flex-column">
-                        <a class="nav-link text-white mb-2" href="dashboard.html"><i
+                        <a class="nav-link text-white mb-2" href="dashboard.php"><i
                                 class="fas fa-bell me-2"></i>Notifications</a>
-                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="community.html"><i
+                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="community.php"><i
                                 class="fas fa-users me-2"></i>Community</a>
-                        <a class="nav-link text-white mb-2" href="settings.html"><i
+                        <a class="nav-link text-white mb-2" href="settings.php"><i
                                 class="fas fa-cog me-2"></i>Settings</a>
                         <button class="nav-link btn btn-link text-white text-start mb-2" id="logout-btn"><i
                                 class="fas fa-sign-out-alt me-2"></i>Log out</button>
@@ -301,7 +301,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../index.html';
+            window.location.href = '../index.php';
         });
 
         // Toggle text section visibility

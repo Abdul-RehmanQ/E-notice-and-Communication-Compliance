@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings - Student Dashboard</title>
+    <title>Notifications - Student Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
@@ -35,6 +35,10 @@
             .navbar .d-flex.text-white {
                 font-size: 0.85rem;
                 gap: 0.5rem !important;
+            }
+
+            .navbar .d-flex.text-white span:contains('|') {
+                display: none;
             }
 
             main .container {
@@ -83,14 +87,14 @@
                         data-bs-target="#sidebar"></button>
                 </div>
                 <div class="offcanvas-body d-flex flex-column p-3">
-                    <h4 class="mb-4"><a href="dashboard.html" class="text-white text-decoration-none">Student
+                    <h4 class="mb-4"><a href="dashboard.php" class="text-white text-decoration-none">Student
                             Dashboard</a></h4>
                     <nav class="nav flex-column">
-                        <a class="nav-link text-white mb-2" href="dashboard.html"><i
+                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="dashboard.php"><i
                                 class="fas fa-bell me-2"></i>Notifications</a>
-                        <a class="nav-link text-white mb-2" href="community.html"><i
+                        <a class="nav-link text-white mb-2" href="community.php"><i
                                 class="fas fa-users me-2"></i>Community</a>
-                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="settings.html"><i
+                        <a class="nav-link text-white mb-2" href="settings.php"><i
                                 class="fas fa-cog me-2"></i>Settings</a>
                         <button class="nav-link btn btn-link text-white text-start mb-2" id="logout-btn"><i
                                 class="fas fa-sign-out-alt me-2"></i>Log out</button>
@@ -101,49 +105,31 @@
             <!-- Main Content -->
             <main class="col-lg-9 col-xl-10 ms-lg-auto px-md-4">
                 <div class="container py-4">
-                    <h2>Settings</h2>
+                    <h2>Notifications</h2>
+                    <h5 class="text-muted mb-3">Notifications from Teachers</h5>
 
-                    <!-- Password Update Section -->
-                    <div class="card mb-4 shadow-sm">
-                        <div class="card-header">
-                            <h5 class="mb-0">Update Password</h5>
-                        </div>
+                    <div class="card mb-3 shadow-sm">
                         <div class="card-body">
-                            <form>
-                                <div class="mb-3">
-                                    <label for="currentPassword" class="form-label">Current Password</label>
-                                    <input type="password" class="form-control" id="currentPassword"
-                                        placeholder="Enter current password" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="newPassword" class="form-label">New Password</label>
-                                    <input type="password" class="form-control" id="newPassword"
-                                        placeholder="Enter new password" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="repeatNewPassword" class="form-label">Repeat New Password</label>
-                                    <input type="password" class="form-control" id="repeatNewPassword"
-                                        placeholder="Repeat new password" required>
-                                </div>
-                                <button type="submit" class="btn btn-primary">Update Password</button>
-                            </form>
+                            <p>Assignment on Data Structures is due tomorrow.</p>
+                            <small class="text-muted">From: Dr. Smith</small>
+                            <br>
+                            <button class="btn btn-primary btn-sm mt-2">Reply</button>
                         </div>
                     </div>
-
-                    <!-- Add Email Section -->
-                    <div class="card shadow-sm">
-                        <div class="card-header">
-                            <h5 class="mb-0">Add Email</h5>
-                        </div>
+                    <div class="card mb-3 shadow-sm">
                         <div class="card-body">
-                            <form>
-                                <div class="mb-3">
-                                    <label for="email" class="form-label">Email Address</label>
-                                    <input type="email" class="form-control" id="email" placeholder="Enter your email"
-                                        required>
-                                </div>
-                                <button type="submit" class="btn btn-primary">Add Email</button>
-                            </form>
+                            <p>Class on Algorithms is cancelled today.</p>
+                            <small class="text-muted">From: Prof. Johnson</small>
+                            <br>
+                            <button class="btn btn-primary btn-sm mt-2">Reply</button>
+                        </div>
+                    </div>
+                    <div class="card mb-3 shadow-sm">
+                        <div class="card-body">
+                            <p>Project submission deadline extended to next week.</p>
+                            <small class="text-muted">From: Dr. Smith</small>
+                            <br>
+                            <button class="btn btn-primary btn-sm mt-2">Reply</button>
                         </div>
                     </div>
                 </div>
@@ -154,7 +140,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../index.html';
+            window.location.href = '../index.php';
         });
     </script>
 </body>
