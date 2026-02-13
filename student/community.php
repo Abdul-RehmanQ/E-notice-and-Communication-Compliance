@@ -8,12 +8,121 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+$error = '';
+$success = '';
+
+// Delete expired posts
+$conn->query("DELETE FROM posts WHERE expires_at < NOW()");
+
+// Handle post deletion
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_post'])) {
+    $postId = (int)$_POST['post_id'];
+    // Only allow deleting own posts
+    $stmt = $conn->prepare("DELETE FROM posts WHERE post_id = ? AND user_id = ?");
+    $stmt->bind_param("ii", $postId, $_SESSION['user_id']);
+    if ($stmt->execute() && $stmt->affected_rows > 0) {
+        $success = "Post deleted successfully!";
+    } else {
+        $error = "Failed to delete post or post not found.";
+    }
+    $stmt->close();
+}
+
+// Handle new post submission
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_post'])) {
+    $scope = $_POST['scope'] ?? 'department';
+    $content = trim($_POST['postContent'] ?? '');
+    $expiresIn = (int)($_POST['expires_in'] ?? 15);
+    $includeText = isset($_POST['include_text']);
+    $includeImage = isset($_POST['include_image']);
+    
+    // Validate
+    if (!$includeText && !$includeImage) {
+        $error = "Please select at least one content type.";
+    } elseif ($includeText && empty($content)) {
+        $error = "Please write a message for the post.";
+    } elseif ($includeImage && (!isset($_FILES['postImage']) || $_FILES['postImage']['error'] == UPLOAD_ERR_NO_FILE)) {
+        $error = "Please select an image to upload.";
+    } else {
+        $imageData = null;
+        $imageType = null;
+        $imageSize = null;
+        
+        // Handle image upload
+        if ($includeImage && isset($_FILES['postImage']) && $_FILES['postImage']['error'] == UPLOAD_ERR_OK) {
+            $maxSize = 2 * 1024 * 1024; // 2MB
+            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+            
+            if ($_FILES['postImage']['size'] > $maxSize) {
+                $error = "Image must be under 2MB.";
+            } elseif (!in_array($_FILES['postImage']['type'], $allowedTypes)) {
+                $error = "Only JPG, PNG, and GIF images are allowed.";
+            } else {
+                $imageData = file_get_contents($_FILES['postImage']['tmp_name']);
+                $imageType = $_FILES['postImage']['type'];
+                $imageSize = $_FILES['postImage']['size'];
+            }
+        }
+        
+        if (empty($error)) {
+            $expiresAt = date('Y-m-d H:i:s', strtotime("+$expiresIn days"));
+            $userId = $_SESSION['user_id'];
+            
+            $stmt = $conn->prepare("INSERT INTO posts (user_id, content, image_data, image_type, image_size, scope, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("isssiss", $userId, $content, $imageData, $imageType, $imageSize, $scope, $expiresAt);
+            
+            if ($stmt->execute()) {
+                $success = "Post created successfully! It will expire in $expiresIn days.";
+            } else {
+                $error = "Failed to create post: " . $conn->error;
+            }
+            $stmt->close();
+        }
+    }
+}
+
 // Fetch student data
 $stmt = $conn->prepare("SELECT s.name, s.Roll_no, s.department, s.session FROM student s WHERE s.student_id = ?");
 $stmt->bind_param("i", $_SESSION['student_id']);
 $stmt->execute();
 $result = $stmt->get_result();
 $student = $result->fetch_assoc();
+$stmt->close();
+
+$studentDepartment = $student['department'];
+
+// Fetch posts: All university posts OR department-only posts from same department
+$posts = [];
+$stmt = $conn->prepare("SELECT p.*, u.email, 
+                        COALESCE(s.name, t.name) as poster_name,
+                        s.Roll_no as poster_roll,
+                        s.department as poster_department
+                        FROM posts p 
+                        LEFT JOIN user u ON p.user_id = u.user_id 
+                        LEFT JOIN student s ON p.user_id = s.student_id
+                        LEFT JOIN teacher t ON p.user_id = t.teacher_id
+                        WHERE p.expires_at > NOW() 
+                        AND (p.scope = 'all' OR (p.scope = 'department' AND s.department = ?))
+                        ORDER BY p.created_at DESC");
+$stmt->bind_param("s", $studentDepartment);
+$stmt->execute();
+$result = $stmt->get_result();
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $posts[] = $row;
+    }
+}
+$stmt->close();
+
+// Fetch user's own posts for delete dropdown
+$userPosts = [];
+$stmt = $conn->prepare("SELECT post_id, content, created_at FROM posts WHERE user_id = ? AND expires_at > NOW() ORDER BY created_at DESC");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$userPostsResult = $stmt->get_result();
+while ($row = $userPostsResult->fetch_assoc()) {
+    $userPosts[] = $row;
+}
 $stmt->close();
 ?>
 <!DOCTYPE html>
@@ -128,6 +237,20 @@ $stmt->close();
             <!-- Main Content -->
             <main class="col-lg-9 col-xl-10 ms-lg-auto px-md-4">
                 <div class="container-fluid py-4">
+                    <?php if ($error): ?>
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <?php echo htmlspecialchars($error); ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <?php if ($success): ?>
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <?php echo htmlspecialchars($success); ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+
                     <!-- Action Bar -->
                     <div class="d-flex flex-wrap gap-2 mb-4">
                         <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addPostModal">
@@ -149,37 +272,41 @@ $stmt->close();
                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
                                         aria-label="Close"></button>
                                 </div>
-                                <div class="modal-body">
-                                    <div class="mb-3">
-                                        <label for="selectPostToDelete" class="form-label fw-bold">Select a post to
-                                            delete:</label>
-                                        <select class="form-select" id="selectPostToDelete">
-                                            <option value="" selected disabled>-- Choose a post --</option>
-                                            <option value="1">Sample post content...</option>
-                                            <option value="2">Another sample post...</option>
-                                            <option value="3">Yet another post here.</option>
-                                            <option value="4">More content to fill the space.</option>
-                                        </select>
-                                    </div>
-                                    <div id="deleteConfirmSection" class="d-none">
-                                        <div class="alert alert-warning">
-                                            <i class="fas fa-exclamation-triangle me-2"></i>
-                                            <strong>Are you sure?</strong> This action cannot be undone.
+                                <form method="POST" action="">
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label for="selectPostToDelete" class="form-label fw-bold">Select a post to
+                                                delete:</label>
+                                            <select class="form-select" id="selectPostToDelete" name="post_id" required>
+                                                <option value="" selected disabled>-- Choose a post --</option>
+                                                <?php foreach ($userPosts as $userPost): ?>
+                                                    <option value="<?php echo $userPost['post_id']; ?>">
+                                                        <?php 
+                                                        $preview = !empty($userPost['content']) ? substr($userPost['content'], 0, 50) : '[Image Post]';
+                                                        echo htmlspecialchars($preview) . (strlen($userPost['content']) > 50 ? '...' : '');
+                                                        ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                                <?php if (empty($userPosts)): ?>
+                                                    <option value="" disabled>No posts to delete</option>
+                                                <?php endif; ?>
+                                            </select>
                                         </div>
-                                        <div class="card bg-light">
-                                            <div class="card-body">
-                                                <p class="mb-0" id="selectedPostPreview"></p>
+                                        <div id="deleteConfirmSection" class="d-none">
+                                            <div class="alert alert-warning">
+                                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                                <strong>Are you sure?</strong> This action cannot be undone.
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary"
-                                        data-bs-dismiss="modal">Cancel</button>
-                                    <button type="button" class="btn btn-danger" id="confirmDeletePost" disabled>
-                                        <i class="fas fa-trash me-1"></i> Delete Post
-                                    </button>
-                                </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary"
+                                            data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" name="delete_post" class="btn btn-danger" id="confirmDeletePost" <?php echo empty($userPosts) ? 'disabled' : ''; ?>>
+                                            <i class="fas fa-trash me-1"></i> Delete Post
+                                        </button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     </div>
@@ -195,21 +322,46 @@ $stmt->close();
                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
                                         aria-label="Close"></button>
                                 </div>
-                                <div class="modal-body">
-                                    <form id="addPostForm">
+                                <form id="addPostForm" method="POST" enctype="multipart/form-data">
+                                    <div class="modal-body">
+                                        <!-- Post Visibility -->
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Post Visibility</label>
+                                            <div class="d-flex flex-wrap gap-3">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="scope" id="scopeDept" value="department" checked>
+                                                    <label class="form-check-label" for="scopeDept">Department only</label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" name="scope" id="scopeAll" value="all">
+                                                    <label class="form-check-label" for="scopeAll">All University</label>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Post Expiration -->
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold">Post Expiration</label>
+                                            <select name="expires_in" class="form-select" style="max-width: 250px;">
+                                                <option value="7">Delete after 7 days</option>
+                                                <option value="15" selected>Delete after 15 days</option>
+                                                <option value="30">Delete after 30 days</option>
+                                            </select>
+                                            <div class="form-text">Post will be automatically deleted after this period.</div>
+                                        </div>
+
                                         <!-- Post Type Selection -->
                                         <div class="mb-4">
                                             <label class="form-label fw-bold">What would you like to post?</label>
                                             <div class="d-flex flex-wrap gap-2">
                                                 <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="includeText"
-                                                        checked>
+                                                    <input class="form-check-input" type="checkbox" id="includeText" name="include_text" checked>
                                                     <label class="form-check-label" for="includeText">
                                                         <i class="fas fa-pen me-1"></i> Write Something
                                                     </label>
                                                 </div>
                                                 <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="includeImage">
+                                                    <input class="form-check-input" type="checkbox" id="includeImage" name="include_image">
                                                     <label class="form-check-label" for="includeImage">
                                                         <i class="fas fa-image me-1"></i> Upload Image
                                                     </label>
@@ -220,15 +372,15 @@ $stmt->close();
                                         <!-- Text Content Section -->
                                         <div class="mb-3" id="textSection">
                                             <label for="postContent" class="form-label fw-bold">Your Message</label>
-                                            <textarea class="form-control" id="postContent" rows="4"
+                                            <textarea class="form-control" id="postContent" name="postContent" rows="4"
                                                 placeholder="What's on your mind?"></textarea>
                                         </div>
 
                                         <!-- Image Upload Section -->
                                         <div class="mb-3 d-none" id="imageSection">
                                             <label for="postImage" class="form-label fw-bold">Upload Image</label>
-                                            <input class="form-control" type="file" id="postImage" accept="image/*">
-                                            <div class="form-text">Accepted formats: JPG, PNG, GIF (Max 5MB)</div>
+                                            <input class="form-control" type="file" id="postImage" name="postImage" accept="image/*">
+                                            <div class="form-text">Accepted formats: JPG, PNG, GIF (Max 2MB)</div>
                                             <!-- Image Preview -->
                                             <div id="imagePreview" class="mt-3 d-none">
                                                 <img src="" alt="Preview" class="img-fluid rounded"
@@ -239,15 +391,15 @@ $stmt->close();
                                                 </button>
                                             </div>
                                         </div>
-                                    </form>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary"
-                                        data-bs-dismiss="modal">Cancel</button>
-                                    <button type="button" class="btn btn-success" id="submitPost">
-                                        <i class="fas fa-paper-plane me-1"></i> Send for Approval
-                                    </button>
-                                </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary"
+                                            data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" name="create_post" class="btn btn-success" id="submitPost">
+                                            <i class="fas fa-paper-plane me-1"></i> Create Post
+                                        </button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
                     </div>
@@ -260,33 +412,59 @@ $stmt->close();
                                 <div
                                     class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                                     <h3 class="mb-0 h5">Recent Posts</h3>
-                                    <div class="btn-group" role="group">
-                                        <button type="button" class="btn btn-outline-primary active btn-sm">View
-                                            all</button>
-                                        <button type="button" class="btn btn-outline-primary btn-sm">Dept Only</button>
-                                    </div>
                                 </div>
                                 <div class="card-body">
-                                    <div class="card mb-3 shadow-sm">
-                                        <div class="card-body">
-                                            <p class="mb-0">Sample post content...</p>
+                                    <?php if (empty($posts)): ?>
+                                        <div class="alert alert-info">
+                                            No posts yet. Click "Add Post" to create one.
                                         </div>
-                                    </div>
-                                    <div class="card mb-3 shadow-sm">
-                                        <div class="card-body">
-                                            <p class="mb-0">Another sample post...</p>
-                                        </div>
-                                    </div>
-                                    <div class="card mb-3 shadow-sm">
-                                        <div class="card-body">
-                                            <p class="mb-0">Yet another post here.</p>
-                                        </div>
-                                    </div>
-                                    <div class="card mb-3 shadow-sm">
-                                        <div class="card-body">
-                                            <p class="mb-0">More content to fill the space.</p>
-                                        </div>
-                                    </div>
+                                    <?php else: ?>
+                                        <?php foreach ($posts as $post): ?>
+                                            <div class="card mb-3 shadow-sm">
+                                                <div class="card-body">
+                                                    <?php if (!empty($post['content'])): ?>
+                                                        <p class="mb-2"><?php echo nl2br(htmlspecialchars($post['content'])); ?></p>
+                                                    <?php endif; ?>
+                                                    
+                                                    <?php if (!empty($post['image_data'])): ?>
+                                                        <div class="mb-2">
+                                                            <img src="data:<?php echo $post['image_type']; ?>;base64,<?php echo base64_encode($post['image_data']); ?>" 
+                                                                 class="img-fluid rounded" style="max-height: 300px;">
+                                                        </div>
+                                                    <?php endif; ?>
+                                                    
+                                                    <div class="d-flex flex-wrap justify-content-between align-items-center mt-2">
+                                                        <small class="text-muted">
+                                                            <i class="fas fa-user me-1"></i>
+                                                            <?php echo htmlspecialchars($post['poster_name'] ?? 'Unknown'); ?>
+                                                            <?php if (!empty($post['poster_roll'])): ?>
+                                                                (<?php echo htmlspecialchars($post['poster_roll']); ?>)
+                                                            <?php endif; ?>
+                                                        </small>
+                                                        <small class="text-muted">
+                                                            <i class="fas fa-globe me-1"></i>
+                                                            <?php echo $post['scope'] == 'all' ? 'All University' : 'Department Only'; ?>
+                                                        </small>
+                                                    </div>
+                                                    <div class="d-flex flex-wrap justify-content-between align-items-center mt-1">
+                                                        <small class="text-muted">
+                                                            <i class="fas fa-calendar me-1"></i>
+                                                            <?php echo date('M d, Y h:i A', strtotime($post['created_at'])); ?>
+                                                        </small>
+                                                        <small>
+                                                            <?php 
+                                                            $daysLeft = ceil((strtotime($post['expires_at']) - time()) / 86400);
+                                                            $badgeClass = $daysLeft <= 3 ? 'bg-warning text-dark' : 'bg-secondary';
+                                                            ?>
+                                                            <span class="badge <?php echo $badgeClass; ?>">
+                                                                <i class="fas fa-clock me-1"></i>Expires in <?php echo $daysLeft; ?> day<?php echo $daysLeft != 1 ? 's' : ''; ?>
+                                                            </span>
+                                                        </small>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -295,18 +473,24 @@ $stmt->close();
                         <div class="col-lg-4 mb-4">
                             <div class="card shadow-sm h-100">
                                 <div class="card-header">
-                                    <h4 class="mb-0 h5">Your Activity</h4>
+                                    <h4 class="mb-0 h5">Your Posts</h4>
                                 </div>
                                 <div class="card-body">
-                                    <ul class="list-group list-group-flush">
-                                        <li class="list-group-item">You posted: "Sample post content..."</li>
-                                        <li class="list-group-item">You liked: "Another sample post..."</li>
-                                        <li class="list-group-item">You commented on: "Sample post content..."</li>
-                                        <li class="list-group-item">New reply to your post</li>
-                                        <li class="list-group-item">Post from your department</li>
-                                        <li class="list-group-item">Shared a resource</li>
-                                        <li class="list-group-item">Joined a discussion</li>
-                                    </ul>
+                                    <?php if (empty($userPosts)): ?>
+                                        <p class="text-muted">You haven't posted anything yet.</p>
+                                    <?php else: ?>
+                                        <ul class="list-group list-group-flush">
+                                            <?php foreach ($userPosts as $userPost): ?>
+                                                <li class="list-group-item">
+                                                    <small class="text-muted"><?php echo date('M d', strtotime($userPost['created_at'])); ?>:</small>
+                                                    <?php 
+                                                    $preview = !empty($userPost['content']) ? substr($userPost['content'], 0, 40) : '[Image Post]';
+                                                    echo htmlspecialchars($preview) . (strlen($userPost['content']) > 40 ? '...' : '');
+                                                    ?>
+                                                </li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -359,9 +543,9 @@ $stmt->close();
                     return;
                 }
 
-                // Validate file size (5MB max)
-                if (file.size > 5 * 1024 * 1024) {
-                    alert('Image size must be less than 5MB.');
+                // Validate file size (2MB max)
+                if (file.size > 2 * 1024 * 1024) {
+                    alert('Image size must be less than 2MB.');
                     this.value = '';
                     return;
                 }
@@ -383,48 +567,30 @@ $stmt->close();
             document.getElementById('imagePreview').classList.add('d-none');
         });
 
-        // Submit post
-        document.getElementById('submitPost').addEventListener('click', function () {
+        // Form validation before submit
+        document.getElementById('addPostForm').addEventListener('submit', function(e) {
             const includeText = document.getElementById('includeText').checked;
             const includeImage = document.getElementById('includeImage').checked;
             const postContent = document.getElementById('postContent').value.trim();
             const postImage = document.getElementById('postImage').files[0];
 
-            // Validation
             if (!includeText && !includeImage) {
+                e.preventDefault();
                 alert('Please select at least one option: Write something or Upload an image.');
                 return;
             }
 
             if (includeText && !postContent) {
+                e.preventDefault();
                 alert('Please write something to post.');
                 return;
             }
 
             if (includeImage && !postImage) {
+                e.preventDefault();
                 alert('Please select an image to upload.');
                 return;
             }
-
-            // Placeholder: Here you would send data to the backend
-            console.log('Post submitted:', {
-                text: includeText ? postContent : null,
-                image: includeImage ? postImage.name : null
-            });
-
-            alert('Post created successfully!');
-
-            // Reset form and close modal
-            document.getElementById('addPostForm').reset();
-            document.getElementById('imagePreview').classList.add('d-none');
-            document.getElementById('imageSection').classList.add('d-none');
-            document.getElementById('textSection').classList.remove('d-none');
-            document.getElementById('includeText').checked = true;
-            document.getElementById('includeImage').checked = false;
-
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('addPostModal'));
-            modal.hide();
         });
 
         // Reset form when modal is closed
@@ -437,49 +603,20 @@ $stmt->close();
             document.getElementById('includeImage').checked = false;
         });
 
-        // Delete Post functionality
-        const selectPostToDelete = document.getElementById('selectPostToDelete');
-        const deleteConfirmSection = document.getElementById('deleteConfirmSection');
-        const selectedPostPreview = document.getElementById('selectedPostPreview');
-        const confirmDeleteBtn = document.getElementById('confirmDeletePost');
-
-        // Show confirmation when a post is selected
-        selectPostToDelete.addEventListener('change', function () {
+        // Delete Post - show warning when post is selected
+        document.getElementById('selectPostToDelete').addEventListener('change', function() {
+            const deleteConfirmSection = document.getElementById('deleteConfirmSection');
             if (this.value) {
-                const selectedOption = this.options[this.selectedIndex];
-                selectedPostPreview.textContent = selectedOption.text;
                 deleteConfirmSection.classList.remove('d-none');
-                confirmDeleteBtn.disabled = false;
             } else {
                 deleteConfirmSection.classList.add('d-none');
-                confirmDeleteBtn.disabled = true;
             }
-        });
-
-        // Confirm delete
-        confirmDeleteBtn.addEventListener('click', function () {
-            const postId = selectPostToDelete.value;
-            const postText = selectPostToDelete.options[selectPostToDelete.selectedIndex].text;
-
-            // Placeholder: Here you would send delete request to the backend
-            console.log('Deleting post:', { id: postId, text: postText });
-
-            alert('Post deleted successfully!');
-
-            // Reset and close modal
-            selectPostToDelete.value = '';
-            deleteConfirmSection.classList.add('d-none');
-            confirmDeleteBtn.disabled = true;
-
-            const modal = bootstrap.Modal.getInstance(document.getElementById('deletePostModal'));
-            modal.hide();
         });
 
         // Reset delete modal when closed
         document.getElementById('deletePostModal').addEventListener('hidden.bs.modal', function () {
-            selectPostToDelete.value = '';
-            deleteConfirmSection.classList.add('d-none');
-            confirmDeleteBtn.disabled = true;
+            document.getElementById('selectPostToDelete').value = '';
+            document.getElementById('deleteConfirmSection').classList.add('d-none');
         });
     </script>
 </body>
