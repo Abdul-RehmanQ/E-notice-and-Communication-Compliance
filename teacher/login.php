@@ -72,8 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             </div>
                             <div class="mb-3">
                                 <label for="teacherPassword" class="form-label">Password</label>
-                                <input type="password" class="form-control" id="teacherPassword" name="password"
-                                    placeholder="Enter your password" required>
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="teacherPassword" name="password"
+                                        placeholder="Enter your password" required>
+                                    <button class="btn btn-outline-secondary" type="button" id="toggleTeacherPassword" aria-label="Show password">Show</button>
+                                </div>
                             </div>
                             <div class="d-grid">
                                 <button type="submit" class="btn btn-primary">Login</button>
@@ -92,6 +95,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const teacherPasswordInput = document.getElementById('teacherPassword');
+        const toggleTeacherPasswordBtn = document.getElementById('toggleTeacherPassword');
+
+        toggleTeacherPasswordBtn.addEventListener('click', function () {
+            const isPassword = teacherPasswordInput.type === 'password';
+            teacherPasswordInput.type = isPassword ? 'text' : 'password';
+            toggleTeacherPasswordBtn.textContent = isPassword ? 'Hide' : 'Show';
+            toggleTeacherPasswordBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+        });
+    </script>
 </body>
 
 </html>
