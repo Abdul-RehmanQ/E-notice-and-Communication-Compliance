@@ -1,3 +1,21 @@
+<?php
+session_start();
+include '../config.php';
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../index.php");
+    exit();
+}
+
+// Fetch student data
+$stmt = $conn->prepare("SELECT s.name, s.Roll_no, s.department, s.session FROM student s WHERE s.student_id = ?");
+$stmt->bind_param("i", $_SESSION['student_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$student = $result->fetch_assoc();
+$stmt->close();
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -56,13 +74,13 @@
         style="left: 250px; width: calc(100% - 250px);">
         <div class="container-fluid justify-content-center">
             <div class="d-flex text-white gap-3 flex-wrap justify-content-center">
-                <span><strong>Name:</strong> John Doe</span>
+                <span><strong>Name:</strong> <?php echo htmlspecialchars($student['name']); ?></span>
                 <span>|</span>
-                <span><strong>Roll No:</strong> 12345</span>
+                <span><strong>Roll No:</strong> <?php echo htmlspecialchars($student['Roll_no']); ?></span>
                 <span>|</span>
-                <span><strong>Department:</strong> Computer Science</span>
+                <span><strong>Department:</strong> <?php echo htmlspecialchars($student['department']); ?></span>
                 <span>|</span>
-                <span><strong>Session:</strong> 2023-2024</span>
+                <span><strong>Session:</strong> <?php echo htmlspecialchars($student['session']); ?></span>
             </div>
         </div>
     </nav>
@@ -140,7 +158,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../index.php';
+            window.location.href = '../logout.php';
         });
     </script>
 </body>

@@ -1,6 +1,54 @@
-<!DOCTYPE html>
-<html lang="en">
+<?php
+session_start();
+include 'config.php';
 
+$error = '';
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $rollNumber = trim($_POST['rollNumber']);
+    $password = $_POST['password'];
+    
+    // Join student and user tables to get credentials by roll number
+    $stmt = $conn->prepare("SELECT s.student_id, s.Roll_no, s.name, u.user_id, u.password 
+                            FROM student s 
+                            INNER JOIN user u ON s.student_id = u.user_id 
+                            WHERE s.Roll_no = ?");
+    $stmt->bind_param("s", $rollNumber);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows == 1) {
+        $student = $result->fetch_assoc();
+        // Verify password (supports both plain text and hashed passwords)
+        $passwordValid = ($password === $student['password']) || password_verify($password, $student['password']);
+        
+        if ($passwordValid) {
+            // Update login_time
+            $updateStmt = $conn->prepare("UPDATE user SET login_time = NOW() WHERE user_id = ?");
+            $updateStmt->bind_param("i", $student['user_id']);
+            $updateStmt->execute();
+            $updateStmt->close();
+            
+            $_SESSION['user_id'] = $student['user_id'];
+            $_SESSION['student_id'] = $student['student_id'];
+            $_SESSION['roll_number'] = $student['Roll_no'];
+            $_SESSION['student_name'] = $student['name'];
+            header("Location: student/dashboard.php");
+            exit();
+        } else {
+            $error = "Invalid password!";
+        }
+    } else {
+        $error = "Student not found!";
+    }
+    $stmt->close();
+}
+?>
+
+<!DOCTYPE html>
+
+<html lang="en">
+    
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,15 +63,18 @@
                 <div class="card mt-5">
                     <div class="card-body">
                         <h2 class="card-title text-center mb-4">Student Login</h2>
-                        <form>
+                        <?php if ($error): ?>
+                            <div class="alert alert-danger"><?php echo $error; ?></div>
+                        <?php endif; ?>
+                        <form method="POST" action="">
                             <div class="mb-3">
                                 <label for="rollNumber" class="form-label">Student Roll Number</label>
-                                <input type="text" class="form-control" id="rollNumber"
+                                <input type="text" class="form-control" id="rollNumber" name="rollNumber"
                                     placeholder="Enter your roll number" required>
                             </div>
                             <div class="mb-3">
                                 <label for="password" class="form-label">Password</label>
-                                <input type="password" class="form-control" id="password"
+                                <input type="password" class="form-control" id="password" name="password"
                                     placeholder="Enter your password" required>
                             </div>
                             <div class="d-grid">

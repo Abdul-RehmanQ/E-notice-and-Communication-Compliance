@@ -1,3 +1,102 @@
+<?php
+session_start();
+include '../config.php';
+
+// Check if user is logged in
+if (!isset($_SESSION['user_id'])) {
+    header("Location: ../index.php");
+    exit();
+}
+
+$password_error = '';
+$password_success = '';
+$email_error = '';
+$email_success = '';
+
+// Handle Password Update
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
+    $currentPassword = $_POST['currentPassword'];
+    $newPassword = $_POST['newPassword'];
+    $repeatNewPassword = $_POST['repeatNewPassword'];
+    
+    // Fetch current password from DB
+    $stmt = $conn->prepare("SELECT password FROM user WHERE user_id = ?");
+    $stmt->bind_param("i", $_SESSION['user_id']);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
+    $stmt->close();
+    
+    // Verify current password (check both plain and hashed)
+    $passwordValid = ($currentPassword === $user['password']) || password_verify($currentPassword, $user['password']);
+    
+    if (!$passwordValid) {
+        $password_error = "Current password is incorrect!";
+    } elseif ($newPassword !== $repeatNewPassword) {
+        $password_error = "New passwords do not match!";
+    } elseif (strlen($newPassword) < 6) {
+        $password_error = "Password must be at least 6 characters!";
+    } else {
+        // Hash the new password
+        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+        $updateStmt = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ?");
+        $updateStmt->bind_param("si", $hashedPassword, $_SESSION['user_id']);
+        if ($updateStmt->execute()) {
+            $password_success = "Password updated successfully!";
+        } else {
+            $password_error = "Failed to update password!";
+        }
+        $updateStmt->close();
+    }
+}
+
+// Handle Email Add/Update
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_email'])) {
+    $email = trim($_POST['email']);
+    
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $email_error = "Invalid email format!";
+    } else {
+        // Check if email already exists for another user
+        $checkStmt = $conn->prepare("SELECT user_id FROM user WHERE email = ? AND user_id != ?");
+        $checkStmt->bind_param("si", $email, $_SESSION['user_id']);
+        $checkStmt->execute();
+        $checkResult = $checkStmt->get_result();
+        
+        if ($checkResult->num_rows > 0) {
+            $email_error = "This email is already in use by another account!";
+        } else {
+            // Update email
+            $updateStmt = $conn->prepare("UPDATE user SET email = ? WHERE user_id = ?");
+            $updateStmt->bind_param("si", $email, $_SESSION['user_id']);
+            if ($updateStmt->execute()) {
+                $email_success = "Email updated successfully!";
+            } else {
+                $email_error = "Failed to update email!";
+            }
+            $updateStmt->close();
+        }
+        $checkStmt->close();
+    }
+}
+
+// Fetch student data
+$stmt = $conn->prepare("SELECT s.name, s.Roll_no, s.department, s.session FROM student s WHERE s.student_id = ?");
+$stmt->bind_param("i", $_SESSION['student_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$student = $result->fetch_assoc();
+$stmt->close();
+
+// Fetch current email
+$stmt = $conn->prepare("SELECT email FROM user WHERE user_id = ?");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$userData = $result->fetch_assoc();
+$currentEmail = $userData['email'] ?? '';
+$stmt->close();
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -52,13 +151,13 @@
         style="left: 250px; width: calc(100% - 250px);">
         <div class="container-fluid justify-content-center">
             <div class="d-flex text-white gap-3 flex-wrap justify-content-center">
-                <span><strong>Name:</strong> John Doe</span>
+                <span><strong>Name:</strong> <?php echo htmlspecialchars($student['name']); ?></span>
                 <span>|</span>
-                <span><strong>Roll No:</strong> 12345</span>
+                <span><strong>Roll No:</strong> <?php echo htmlspecialchars($student['Roll_no']); ?></span>
                 <span>|</span>
-                <span><strong>Department:</strong> Computer Science</span>
+                <span><strong>Department:</strong> <?php echo htmlspecialchars($student['department']); ?></span>
                 <span>|</span>
-                <span><strong>Session:</strong> 2023-2024</span>
+                <span><strong>Session:</strong> <?php echo htmlspecialchars($student['session']); ?></span>
             </div>
         </div>
     </nav>
@@ -109,23 +208,29 @@
                             <h5 class="mb-0">Update Password</h5>
                         </div>
                         <div class="card-body">
-                            <form>
+                            <?php if ($password_error): ?>
+                                <div class="alert alert-danger"><?php echo $password_error; ?></div>
+                            <?php endif; ?>
+                            <?php if ($password_success): ?>
+                                <div class="alert alert-success"><?php echo $password_success; ?></div>
+                            <?php endif; ?>
+                            <form method="POST" action="">
                                 <div class="mb-3">
                                     <label for="currentPassword" class="form-label">Current Password</label>
-                                    <input type="password" class="form-control" id="currentPassword"
+                                    <input type="password" class="form-control" id="currentPassword" name="currentPassword"
                                         placeholder="Enter current password" required>
                                 </div>
                                 <div class="mb-3">
                                     <label for="newPassword" class="form-label">New Password</label>
-                                    <input type="password" class="form-control" id="newPassword"
+                                    <input type="password" class="form-control" id="newPassword" name="newPassword"
                                         placeholder="Enter new password" required>
                                 </div>
                                 <div class="mb-3">
                                     <label for="repeatNewPassword" class="form-label">Repeat New Password</label>
-                                    <input type="password" class="form-control" id="repeatNewPassword"
+                                    <input type="password" class="form-control" id="repeatNewPassword" name="repeatNewPassword"
                                         placeholder="Repeat new password" required>
                                 </div>
-                                <button type="submit" class="btn btn-primary">Update Password</button>
+                                <button type="submit" name="update_password" class="btn btn-primary">Update Password</button>
                             </form>
                         </div>
                     </div>
@@ -133,16 +238,23 @@
                     <!-- Add Email Section -->
                     <div class="card shadow-sm">
                         <div class="card-header">
-                            <h5 class="mb-0">Add Email</h5>
+                            <h5 class="mb-0"><?php echo empty($currentEmail) ? 'Add Email' : 'Update Email'; ?></h5>
                         </div>
                         <div class="card-body">
-                            <form>
+                            <?php if ($email_error): ?>
+                                <div class="alert alert-danger"><?php echo $email_error; ?></div>
+                            <?php endif; ?>
+                            <?php if ($email_success): ?>
+                                <div class="alert alert-success"><?php echo $email_success; ?></div>
+                            <?php endif; ?>
+                            <form method="POST" action="">
                                 <div class="mb-3">
                                     <label for="email" class="form-label">Email Address</label>
-                                    <input type="email" class="form-control" id="email" placeholder="Enter your email"
-                                        required>
+                                    <input type="email" class="form-control" id="email" name="email" 
+                                        value="<?php echo htmlspecialchars($currentEmail); ?>"
+                                        placeholder="Enter your email" required>
                                 </div>
-                                <button type="submit" class="btn btn-primary">Add Email</button>
+                                <button type="submit" name="update_email" class="btn btn-primary"><?php echo empty($currentEmail) ? 'Add Email' : 'Update Email'; ?></button>
                             </form>
                         </div>
                     </div>
@@ -154,7 +266,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../index.php';
+            window.location.href = '../logout.php';
         });
     </script>
 </body>
