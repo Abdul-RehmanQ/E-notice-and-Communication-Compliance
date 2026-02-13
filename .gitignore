@@ -1,0 +1,6 @@
+# Local secret overrides
+email_config.local.php
+
+# Environment files
+.env
+.env.*

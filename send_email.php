@@ -18,6 +18,10 @@ function sendEmail($to, $subject, $body, $isHTML = true) {
     $mail = new PHPMailer(true);
     
     try {
+        if (empty(SMTP_USERNAME) || empty(SMTP_PASSWORD)) {
+            return ['success' => false, 'error' => 'SMTP credentials are not configured. Set SMTP_USERNAME and SMTP_PASSWORD in email_config.local.php or environment variables.'];
+        }
+
         // Server settings
         $mail->isSMTP();
         $mail->Host = SMTP_HOST;
