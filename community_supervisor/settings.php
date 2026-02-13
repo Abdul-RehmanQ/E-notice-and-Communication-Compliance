@@ -1,3 +1,57 @@
+<?php
+session_start();
+include '../config.php';
+
+// Check if user is logged in as supervisor
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'community_supervisor') {
+    header("Location: login.php");
+    exit();
+}
+
+$password_error = '';
+$password_success = '';
+
+// Handle Password Update
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
+    $currentPassword = $_POST['currentPassword'];
+    $newPassword = $_POST['newPassword'];
+    $repeatNewPassword = $_POST['repeatNewPassword'];
+    
+    // Fetch current password from DB
+    $stmt = $conn->prepare("SELECT password FROM user WHERE user_id = ?");
+    $stmt->bind_param("i", $_SESSION['user_id']);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
+    $stmt->close();
+    
+    // Verify current password (check both plain and hashed)
+    $passwordValid = ($currentPassword === $user['password']) || password_verify($currentPassword, $user['password']);
+    
+    if (!$passwordValid) {
+        $password_error = "Current password is incorrect!";
+    } elseif ($newPassword !== $repeatNewPassword) {
+        $password_error = "New passwords do not match!";
+    } elseif (strlen($newPassword) < 6) {
+        $password_error = "Password must be at least 6 characters!";
+    } else {
+        // Hash the new password
+        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+        $updateStmt = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ?");
+        $updateStmt->bind_param("si", $hashedPassword, $_SESSION['user_id']);
+        if ($updateStmt->execute()) {
+            $password_success = "Password updated successfully!";
+        } else {
+            $password_error = "Failed to update password!";
+        }
+        $updateStmt->close();
+    }
+}
+
+// Count pending posts for sidebar badge
+$statsResult = $conn->query("SELECT COUNT(*) as pending_count FROM posts WHERE status = 'pending' AND expires_at > NOW()");
+$stats = $statsResult->fetch_assoc();
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -29,73 +83,32 @@
                 width: calc(100% - 250px);
             }
         }
-
-        /* 1366x768 and similar laptop screens */
-        @media (min-width: 992px) and (max-width: 1399px) {
-            .navbar .d-flex.text-white {
-                font-size: 0.85rem;
-                gap: 0.5rem !important;
-            }
-
-            main .container {
-                max-width: 100%;
-                padding-left: 1rem;
-                padding-right: 1rem;
-            }
-        }
-
-        .password-toggle {
-            cursor: pointer;
-        }
-
-        .password-strength {
-            height: 5px;
-            border-radius: 3px;
-            transition: all 0.3s ease;
-        }
-
-        .strength-weak {
-            background-color: #dc3545;
-            width: 33%;
-        }
-
-        .strength-medium {
-            background-color: #ffc107;
-            width: 66%;
-        }
-
-        .strength-strong {
-            background-color: #198754;
-            width: 100%;
-        }
     </style>
 </head>
 
 <body class="bg-light">
     <!-- Navbar -->
-    <nav class="navbar navbar-dark bg-primary fixed-top d-none d-lg-flex"
+    <nav class="navbar navbar-dark bg-success fixed-top d-none d-lg-flex"
         style="left: 250px; width: calc(100% - 250px);">
         <div class="container-fluid justify-content-center">
             <div class="d-flex text-white gap-3 flex-wrap justify-content-center">
-                <span><strong>Supervisor:</strong> Admin User</span>
-                <span>|</span>
-                <span><strong>Role:</strong> Community Supervisor</span>
+                <span><strong>Supervisor:</strong> <?php echo htmlspecialchars($_SESSION['supervisor_name']); ?></span>
             </div>
         </div>
     </nav>
     <!-- Mobile Navbar -->
-    <nav class="navbar navbar-dark bg-primary fixed-top d-lg-none">
+    <nav class="navbar navbar-dark bg-success fixed-top d-lg-none">
         <div class="container-fluid">
             <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            <span class="navbar-brand mb-0">Supervisor Settings</span>
+            <span class="navbar-brand mb-0">Supervisor Dashboard</span>
         </div>
     </nav>
 
     <div class="container-fluid">
         <div class="row">
-            <!-- Sidebar - Offcanvas on mobile, fixed on desktop -->
+            <!-- Sidebar -->
             <div class="offcanvas-lg offcanvas-start bg-dark text-white" tabindex="-1" id="sidebar"
                 style="width: 250px; height: 100vh;">
                 <div class="offcanvas-header">
@@ -104,15 +117,20 @@
                         data-bs-target="#sidebar"></button>
                 </div>
                 <div class="offcanvas-body d-flex flex-column p-3">
-                    <h4 class="mb-4"><a href="dashboard.php" class="text-white text-decoration-none">Supervisor
-                            Panel</a></h4>
+                    <h4 class="mb-4"><a href="dashboard.php" class="text-white text-decoration-none">Supervisor Panel</a></h4>
                     <nav class="nav flex-column">
-                        <a class="nav-link text-white mb-2" href="dashboard.php"><i
-                                class="fas fa-tachometer-alt me-2"></i>Dashboard</a>
-                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="settings.php"><i
-                                class="fas fa-cog me-2"></i>Settings</a>
-                        <button class="nav-link btn btn-link text-white text-start mb-2" id="logout-btn"><i
-                                class="fas fa-sign-out-alt me-2"></i>Log out</button>
+                        <a class="nav-link text-white mb-2" href="dashboard.php">
+                            <i class="fas fa-tasks me-2"></i>Pending Posts
+                            <?php if ($stats['pending_count'] > 0): ?>
+                                <span class="badge bg-danger ms-2"><?php echo $stats['pending_count']; ?></span>
+                            <?php endif; ?>
+                        </a>
+                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="settings.php">
+                            <i class="fas fa-cog me-2"></i>Settings
+                        </a>
+                        <button class="nav-link btn btn-link text-white text-start mb-2" id="logout-btn">
+                            <i class="fas fa-sign-out-alt me-2"></i>Log out
+                        </button>
                     </nav>
                 </div>
             </div>
@@ -120,233 +138,38 @@
             <!-- Main Content -->
             <main class="col-lg-9 col-xl-10 ms-lg-auto px-md-4">
                 <div class="container py-4">
-                    <h2 class="mb-4"><i class="fas fa-cog me-2"></i>Settings</h2>
+                    <h2>Settings</h2>
 
-                    <div class="row">
-                        <div class="col-lg-8">
-                            <!-- Password Update Section -->
-                            <div class="card mb-4 shadow-sm">
-                                <div class="card-header bg-white">
-                                    <h5 class="mb-0"><i class="fas fa-lock me-2 text-primary"></i>Update Password</h5>
-                                </div>
-                                <div class="card-body">
-                                    <form id="passwordForm">
-                                        <div class="mb-3">
-                                            <label for="currentPassword" class="form-label">Current Password</label>
-                                            <div class="input-group">
-                                                <input type="password" class="form-control" id="currentPassword"
-                                                    placeholder="Enter current password" required>
-                                                <span class="input-group-text password-toggle"
-                                                    onclick="togglePassword('currentPassword', this)">
-                                                    <i class="fas fa-eye"></i>
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label for="newPassword" class="form-label">New Password</label>
-                                            <div class="input-group">
-                                                <input type="password" class="form-control" id="newPassword"
-                                                    placeholder="Enter new password" required
-                                                    oninput="checkPasswordStrength()">
-                                                <span class="input-group-text password-toggle"
-                                                    onclick="togglePassword('newPassword', this)">
-                                                    <i class="fas fa-eye"></i>
-                                                </span>
-                                            </div>
-                                            <div class="mt-2">
-                                                <div class="password-strength bg-secondary" id="passwordStrengthBar">
-                                                </div>
-                                                <small class="text-muted" id="passwordStrengthText">Password strength
-                                                    indicator</small>
-                                            </div>
-                                            <div class="form-text">
-                                                <ul class="mb-0 ps-3">
-                                                    <li id="lengthCheck" class="text-muted">At least 8 characters</li>
-                                                    <li id="uppercaseCheck" class="text-muted">At least one uppercase
-                                                        letter</li>
-                                                    <li id="lowercaseCheck" class="text-muted">At least one lowercase
-                                                        letter</li>
-                                                    <li id="numberCheck" class="text-muted">At least one number</li>
-                                                    <li id="specialCheck" class="text-muted">At least one special
-                                                        character</li>
-                                                </ul>
-                                            </div>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label for="confirmPassword" class="form-label">Confirm New Password</label>
-                                            <div class="input-group">
-                                                <input type="password" class="form-control" id="confirmPassword"
-                                                    placeholder="Confirm new password" required
-                                                    oninput="checkPasswordMatch()">
-                                                <span class="input-group-text password-toggle"
-                                                    onclick="togglePassword('confirmPassword', this)">
-                                                    <i class="fas fa-eye"></i>
-                                                </span>
-                                            </div>
-                                            <small class="text-danger d-none" id="passwordMatchError">
-                                                <i class="fas fa-exclamation-circle me-1"></i>Passwords do not match
-                                            </small>
-                                        </div>
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="fas fa-save me-1"></i>Update Password
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-
-                            <!-- Email Section -->
-                            <div class="card mb-4 shadow-sm">
-                                <div class="card-header bg-white">
-                                    <h5 class="mb-0"><i class="fas fa-envelope me-2 text-primary"></i>Email Settings
-                                    </h5>
-                                </div>
-                                <div class="card-body">
-                                    <!-- Current Email Display -->
-                                    <div class="mb-4" id="currentEmailSection">
-                                        <label class="form-label fw-bold">Current Email</label>
-                                        <div class="d-flex align-items-center gap-2">
-                                            <span class="badge bg-success" id="emailStatus">
-                                                <i class="fas fa-check-circle me-1"></i>Verified
-                                            </span>
-                                            <span id="currentEmailDisplay">admin@example.com</span>
-                                        </div>
-                                    </div>
-
-                                    <!-- Add/Update Email Form -->
-                                    <form id="emailForm">
-                                        <div class="mb-3">
-                                            <label for="newEmail" class="form-label">New Email Address</label>
-                                            <input type="email" class="form-control" id="newEmail"
-                                                placeholder="Enter new email address" required>
-                                            <div class="form-text">
-                                                <i class="fas fa-info-circle me-1"></i>
-                                                A verification link will be sent to this email address.
-                                            </div>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label for="confirmEmail" class="form-label">Confirm Email Address</label>
-                                            <input type="email" class="form-control" id="confirmEmail"
-                                                placeholder="Confirm email address" required>
-                                            <small class="text-danger d-none" id="emailMatchError">
-                                                <i class="fas fa-exclamation-circle me-1"></i>Email addresses do not
-                                                match
-                                            </small>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label for="emailPassword" class="form-label">Enter Password to
-                                                Confirm</label>
-                                            <div class="input-group">
-                                                <input type="password" class="form-control" id="emailPassword"
-                                                    placeholder="Enter your password" required>
-                                                <span class="input-group-text password-toggle"
-                                                    onclick="togglePassword('emailPassword', this)">
-                                                    <i class="fas fa-eye"></i>
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="fas fa-paper-plane me-1"></i>Update Email
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-
-                            <!-- Notification Preferences -->
-                            <div class="card mb-4 shadow-sm">
-                                <div class="card-header bg-white">
-                                    <h5 class="mb-0"><i class="fas fa-bell me-2 text-primary"></i>Notification
-                                        Preferences</h5>
-                                </div>
-                                <div class="card-body">
-                                    <form id="notificationForm">
-                                        <div class="form-check form-switch mb-3">
-                                            <input class="form-check-input" type="checkbox" id="emailNotifications"
-                                                checked>
-                                            <label class="form-check-label" for="emailNotifications">
-                                                <strong>Email Notifications</strong>
-                                                <br><small class="text-muted">Receive email alerts for new pending
-                                                    posts</small>
-                                            </label>
-                                        </div>
-                                        <div class="form-check form-switch mb-3">
-                                            <input class="form-check-input" type="checkbox" id="dailyDigest" checked>
-                                            <label class="form-check-label" for="dailyDigest">
-                                                <strong>Daily Digest</strong>
-                                                <br><small class="text-muted">Receive a daily summary of community
-                                                    activity</small>
-                                            </label>
-                                        </div>
-                                        <div class="form-check form-switch mb-3">
-                                            <input class="form-check-input" type="checkbox" id="urgentAlerts" checked>
-                                            <label class="form-check-label" for="urgentAlerts">
-                                                <strong>Urgent Alerts</strong>
-                                                <br><small class="text-muted">Get notified immediately for flagged
-                                                    content</small>
-                                            </label>
-                                        </div>
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="fas fa-save me-1"></i>Save Preferences
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
+                    <!-- Password Update Section -->
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-header">
+                            <h5 class="mb-0">Update Password</h5>
                         </div>
-
-                        <!-- Quick Info Sidebar -->
-                        <div class="col-lg-4">
-                            <div class="card shadow-sm mb-4">
-                                <div class="card-header bg-white">
-                                    <h5 class="mb-0"><i class="fas fa-user-shield me-2 text-primary"></i>Account Info
-                                    </h5>
+                        <div class="card-body">
+                            <?php if ($password_error): ?>
+                                <div class="alert alert-danger"><?php echo $password_error; ?></div>
+                            <?php endif; ?>
+                            <?php if ($password_success): ?>
+                                <div class="alert alert-success"><?php echo $password_success; ?></div>
+                            <?php endif; ?>
+                            <form method="POST" action="">
+                                <div class="mb-3">
+                                    <label for="currentPassword" class="form-label">Current Password</label>
+                                    <input type="password" class="form-control" id="currentPassword" name="currentPassword"
+                                        placeholder="Enter current password" required>
                                 </div>
-                                <div class="card-body">
-                                    <ul class="list-unstyled mb-0">
-                                        <li class="mb-2">
-                                            <strong>Username:</strong> admin_supervisor
-                                        </li>
-                                        <li class="mb-2">
-                                            <strong>Role:</strong> Community Supervisor
-                                        </li>
-                                        <li class="mb-2">
-                                            <strong>Member Since:</strong> Jan 15, 2024
-                                        </li>
-                                        <li class="mb-2">
-                                            <strong>Last Login:</strong> Feb 12, 2026
-                                        </li>
-                                    </ul>
+                                <div class="mb-3">
+                                    <label for="newPassword" class="form-label">New Password</label>
+                                    <input type="password" class="form-control" id="newPassword" name="newPassword"
+                                        placeholder="Enter new password" required>
                                 </div>
-                            </div>
-
-                            <div class="card shadow-sm">
-                                <div class="card-header bg-white">
-                                    <h5 class="mb-0"><i class="fas fa-shield-alt me-2 text-primary"></i>Security Tips
-                                    </h5>
+                                <div class="mb-3">
+                                    <label for="repeatNewPassword" class="form-label">Repeat New Password</label>
+                                    <input type="password" class="form-control" id="repeatNewPassword" name="repeatNewPassword"
+                                        placeholder="Repeat new password" required>
                                 </div>
-                                <div class="card-body">
-                                    <ul class="list-unstyled mb-0">
-                                        <li class="mb-2">
-                                            <i class="fas fa-check-circle text-success me-2"></i>
-                                            Use a strong, unique password
-                                        </li>
-                                        <li class="mb-2">
-                                            <i class="fas fa-check-circle text-success me-2"></i>
-                                            Enable two-factor authentication
-                                        </li>
-                                        <li class="mb-2">
-                                            <i class="fas fa-check-circle text-success me-2"></i>
-                                            Keep your email updated
-                                        </li>
-                                        <li class="mb-2">
-                                            <i class="fas fa-check-circle text-success me-2"></i>
-                                            Log out from shared devices
-                                        </li>
-                                        <li class="mb-0">
-                                            <i class="fas fa-check-circle text-success me-2"></i>
-                                            Review account activity regularly
-                                        </li>
-                                    </ul>
-                                </div>
-                            </div>
+                                <button type="submit" name="update_password" class="btn btn-primary">Update Password</button>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -354,218 +177,11 @@
         </div>
     </div>
 
-    <!-- Success Toast -->
-    <div class="toast-container position-fixed bottom-0 end-0 p-3">
-        <div id="successToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="toast-header bg-success text-white">
-                <i class="fas fa-check-circle me-2"></i>
-                <strong class="me-auto">Success</strong>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"
-                    aria-label="Close"></button>
-            </div>
-            <div class="toast-body" id="toastMessage">
-                Settings saved successfully.
-            </div>
-        </div>
-    </div>
-
-    <!-- Error Toast -->
-    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="margin-bottom: 60px;">
-        <div id="errorToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="toast-header bg-danger text-white">
-                <i class="fas fa-exclamation-circle me-2"></i>
-                <strong class="me-auto">Error</strong>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"
-                    aria-label="Close"></button>
-            </div>
-            <div class="toast-body" id="errorToastMessage">
-                An error occurred.
-            </div>
-        </div>
-    </div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Logout functionality
         document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../index.php';
+            window.location.href = '../logout.php';
         });
-
-        // Toggle password visibility
-        function togglePassword(inputId, toggleBtn) {
-            const input = document.getElementById(inputId);
-            const icon = toggleBtn.querySelector('i');
-
-            if (input.type === 'password') {
-                input.type = 'text';
-                icon.classList.remove('fa-eye');
-                icon.classList.add('fa-eye-slash');
-            } else {
-                input.type = 'password';
-                icon.classList.remove('fa-eye-slash');
-                icon.classList.add('fa-eye');
-            }
-        }
-
-        // Check password strength
-        function checkPasswordStrength() {
-            const password = document.getElementById('newPassword').value;
-            const strengthBar = document.getElementById('passwordStrengthBar');
-            const strengthText = document.getElementById('passwordStrengthText');
-
-            // Check criteria
-            const hasLength = password.length >= 8;
-            const hasUppercase = /[A-Z]/.test(password);
-            const hasLowercase = /[a-z]/.test(password);
-            const hasNumber = /[0-9]/.test(password);
-            const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
-
-            // Update checkmarks
-            updateCheck('lengthCheck', hasLength);
-            updateCheck('uppercaseCheck', hasUppercase);
-            updateCheck('lowercaseCheck', hasLowercase);
-            updateCheck('numberCheck', hasNumber);
-            updateCheck('specialCheck', hasSpecial);
-
-            // Calculate strength
-            const criteria = [hasLength, hasUppercase, hasLowercase, hasNumber, hasSpecial];
-            const metCriteria = criteria.filter(Boolean).length;
-
-            // Update strength bar
-            strengthBar.classList.remove('strength-weak', 'strength-medium', 'strength-strong');
-
-            if (password.length === 0) {
-                strengthBar.style.width = '0%';
-                strengthText.textContent = 'Password strength indicator';
-            } else if (metCriteria <= 2) {
-                strengthBar.classList.add('strength-weak');
-                strengthText.textContent = 'Weak password';
-            } else if (metCriteria <= 4) {
-                strengthBar.classList.add('strength-medium');
-                strengthText.textContent = 'Medium password';
-            } else {
-                strengthBar.classList.add('strength-strong');
-                strengthText.textContent = 'Strong password';
-            }
-        }
-
-        // Update check mark
-        function updateCheck(elementId, passed) {
-            const element = document.getElementById(elementId);
-            if (passed) {
-                element.classList.remove('text-muted');
-                element.classList.add('text-success');
-            } else {
-                element.classList.remove('text-success');
-                element.classList.add('text-muted');
-            }
-        }
-
-        // Check password match
-        function checkPasswordMatch() {
-            const newPassword = document.getElementById('newPassword').value;
-            const confirmPassword = document.getElementById('confirmPassword').value;
-            const errorElement = document.getElementById('passwordMatchError');
-
-            if (confirmPassword.length > 0 && newPassword !== confirmPassword) {
-                errorElement.classList.remove('d-none');
-            } else {
-                errorElement.classList.add('d-none');
-            }
-        }
-
-        // Check email match
-        document.getElementById('confirmEmail').addEventListener('input', function () {
-            const newEmail = document.getElementById('newEmail').value;
-            const confirmEmail = this.value;
-            const errorElement = document.getElementById('emailMatchError');
-
-            if (confirmEmail.length > 0 && newEmail !== confirmEmail) {
-                errorElement.classList.remove('d-none');
-            } else {
-                errorElement.classList.add('d-none');
-            }
-        });
-
-        // Password form submission
-        document.getElementById('passwordForm').addEventListener('submit', function (e) {
-            e.preventDefault();
-
-            const currentPassword = document.getElementById('currentPassword').value;
-            const newPassword = document.getElementById('newPassword').value;
-            const confirmPassword = document.getElementById('confirmPassword').value;
-
-            // Validate
-            if (newPassword !== confirmPassword) {
-                showError('Passwords do not match');
-                return;
-            }
-
-            if (newPassword.length < 8) {
-                showError('Password must be at least 8 characters long');
-                return;
-            }
-
-            // In a real application, this would send a request to the server
-            showSuccess('Password updated successfully!');
-            this.reset();
-            document.getElementById('passwordStrengthBar').style.width = '0%';
-            document.getElementById('passwordStrengthText').textContent = 'Password strength indicator';
-
-            // Reset checkmarks
-            ['lengthCheck', 'uppercaseCheck', 'lowercaseCheck', 'numberCheck', 'specialCheck'].forEach(id => {
-                document.getElementById(id).classList.remove('text-success');
-                document.getElementById(id).classList.add('text-muted');
-            });
-        });
-
-        // Email form submission
-        document.getElementById('emailForm').addEventListener('submit', function (e) {
-            e.preventDefault();
-
-            const newEmail = document.getElementById('newEmail').value;
-            const confirmEmail = document.getElementById('confirmEmail').value;
-            const password = document.getElementById('emailPassword').value;
-
-            // Validate
-            if (newEmail !== confirmEmail) {
-                showError('Email addresses do not match');
-                return;
-            }
-
-            // Email validation regex
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(newEmail)) {
-                showError('Please enter a valid email address');
-                return;
-            }
-
-            // In a real application, this would send a request to the server
-            showSuccess('Verification email sent to ' + newEmail);
-            this.reset();
-        });
-
-        // Notification preferences form submission
-        document.getElementById('notificationForm').addEventListener('submit', function (e) {
-            e.preventDefault();
-
-            // In a real application, this would send a request to the server
-            showSuccess('Notification preferences saved!');
-        });
-
-        // Show success toast
-        function showSuccess(message) {
-            document.getElementById('toastMessage').textContent = message;
-            const toast = new bootstrap.Toast(document.getElementById('successToast'));
-            toast.show();
-        }
-
-        // Show error toast
-        function showError(message) {
-            document.getElementById('errorToastMessage').textContent = message;
-            const toast = new bootstrap.Toast(document.getElementById('errorToast'));
-            toast.show();
-        }
     </script>
 </body>
 

@@ -91,7 +91,7 @@ $stmt->close();
 
 $studentDepartment = $student['department'];
 
-// Fetch posts: All university posts OR department-only posts from same department
+// Fetch posts: Only APPROVED posts - All university posts OR department-only posts from same department
 $posts = [];
 $stmt = $conn->prepare("SELECT p.*, u.email, 
                         COALESCE(s.name, t.name) as poster_name,
@@ -102,6 +102,7 @@ $stmt = $conn->prepare("SELECT p.*, u.email,
                         LEFT JOIN student s ON p.user_id = s.student_id
                         LEFT JOIN teacher t ON p.user_id = t.teacher_id
                         WHERE p.expires_at > NOW() 
+                        AND p.status = 'approved'
                         AND (p.scope = 'all' OR (p.scope = 'department' AND s.department = ?))
                         ORDER BY p.created_at DESC");
 $stmt->bind_param("s", $studentDepartment);
@@ -396,7 +397,7 @@ $stmt->close();
                                         <button type="button" class="btn btn-secondary"
                                             data-bs-dismiss="modal">Cancel</button>
                                         <button type="submit" name="create_post" class="btn btn-success" id="submitPost">
-                                            <i class="fas fa-paper-plane me-1"></i> Create Post
+                                            <i class="fas fa-paper-plane me-1"></i> Send for Approval
                                         </button>
                                     </div>
                                 </form>
