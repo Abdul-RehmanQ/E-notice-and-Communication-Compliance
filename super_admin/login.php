@@ -5,42 +5,38 @@ include '../config.php';
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $email = trim($_POST['email']);
-    $password = $_POST['password'];
-    
-    // Join community_supervisor and user tables to get credentials
-    $stmt = $conn->prepare("SELECT cs.supervisor_id, cs.name, u.user_id, u.password 
-                            FROM community_supervisor cs 
-                            INNER JOIN user u ON cs.supervisor_id = u.user_id 
-                            WHERE u.email = ? AND u.role = 'community_supervisor'");
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+
+    $stmt = $conn->prepare("SELECT user_id, email, password, role FROM user WHERE email = ? AND role = 'super_admin'");
     $stmt->bind_param("s", $email);
     $stmt->execute();
     $result = $stmt->get_result();
-    
-    if ($result->num_rows == 1) {
-        $supervisor = $result->fetch_assoc();
-        // Verify password (supports both plain text and hashed passwords)
-        $passwordValid = ($password === $supervisor['password']) || password_verify($password, $supervisor['password']);
-        
+
+    if ($result && $result->num_rows === 1) {
+        $admin = $result->fetch_assoc();
+        $passwordValid = ($password === $admin['password']) || password_verify($password, $admin['password']);
+
         if ($passwordValid) {
-            // Update login_time
             $updateStmt = $conn->prepare("UPDATE user SET login_time = NOW() WHERE user_id = ?");
-            $updateStmt->bind_param("i", $supervisor['user_id']);
+            $updateStmt->bind_param("i", $admin['user_id']);
             $updateStmt->execute();
             $updateStmt->close();
-            
-            $_SESSION['user_id'] = $supervisor['user_id'];
-            $_SESSION['supervisor_id'] = $supervisor['supervisor_id'];
-            $_SESSION['supervisor_name'] = $supervisor['name'];
-            $_SESSION['role'] = 'community_supervisor';
+
+            $_SESSION['user_id'] = $admin['user_id'];
+            $_SESSION['role'] = 'super_admin';
+            $_SESSION['super_admin_email'] = $admin['email'];
+            $_SESSION['super_admin_name'] = explode('@', $admin['email'])[0];
+
             header("Location: dashboard.php");
             exit();
-        } else {
-            $error = "Invalid password!";
         }
+
+        $error = 'Invalid password!';
     } else {
-        $error = "Supervisor not found!";
+        $error = 'Super admin not found!';
     }
+
     $stmt->close();
 }
 ?>
@@ -50,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Community Supervisor Login</title>
+    <title>Super Admin Login</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 
@@ -60,9 +56,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <div class="col-md-6 col-lg-4">
                 <div class="card mt-5">
                     <div class="card-body">
-                        <h2 class="card-title text-center mb-4">Supervisor Login</h2>
+                        <h2 class="card-title text-center mb-4">Super Admin Login</h2>
                         <?php if ($error): ?>
-                            <div class="alert alert-danger"><?php echo $error; ?></div>
+                            <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
                         <?php endif; ?>
                         <form method="POST" action="">
                             <div class="mb-3">
@@ -83,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <div class="d-grid gap-2">
                                 <a href="../index.php" class="btn btn-outline-secondary">Student Login</a>
                                 <a href="../teacher/login.php" class="btn btn-outline-secondary">Teacher Login</a>
-                                <a href="../super_admin/login.php" class="btn btn-outline-secondary">Super Admin Login</a>
+                                <a href="../community_supervisor/login.php" class="btn btn-outline-secondary">Community Supervisor Login</a>
                             </div>
                         </form>
                     </div>

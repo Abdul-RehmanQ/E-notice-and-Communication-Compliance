@@ -1,3 +1,33 @@
+<?php
+session_start();
+include '../config.php';
+
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'teacher') {
+    header("Location: login.php");
+    exit();
+}
+
+$stmt = $conn->prepare("SELECT t.teacher_id, t.name, t.department, u.email
+                        FROM teacher t
+                        INNER JOIN user u ON t.teacher_id = u.user_id
+                        WHERE t.teacher_id = ? AND u.role = 'teacher'");
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$teacher = $result ? $result->fetch_assoc() : null;
+$stmt->close();
+
+if (!$teacher) {
+    session_unset();
+    session_destroy();
+    header("Location: login.php");
+    exit();
+}
+
+$_SESSION['teacher_id'] = $teacher['teacher_id'];
+$_SESSION['teacher_name'] = $teacher['name'];
+$_SESSION['teacher_department'] = $teacher['department'];
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -57,9 +87,9 @@
         style="left: 250px; width: calc(100% - 250px);">
         <div class="container-fluid justify-content-center">
             <div class="d-flex text-white gap-3 flex-wrap justify-content-center">
-                <span><strong>Teacher:</strong> Jane Doe</span>
+                <span><strong>Teacher:</strong> <?php echo htmlspecialchars($teacher['name']); ?></span>
                 <span>|</span>
-                <span><strong>Department:</strong> Computer Science</span>
+                <span><strong>Department:</strong> <?php echo htmlspecialchars($teacher['department']); ?></span>
             </div>
         </div>
     </nav>

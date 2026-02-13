@@ -1,20 +1,20 @@
 JS Functions Overview for FYP Project
 ====================================
 
-File: index.html
+File: index.php
 ----------------
 - (No custom JS functions) – Only Bootstrap bundle is loaded; the page is a simple student login form with no scripted behavior.
 
-File: student/dashboard.html
+File: student/dashboard.php
 ----------------------------
 - logout-btn click handler
   - Location: inline <script> at bottom of file.
-  - Behavior: On click, redirects the student back to ../index.html (logout prototype).
+  - Behavior: On click, redirects the student back to ../index.php.
 
-File: student/community.html
+File: student/community.php
 ----------------------------
 - logout-btn click handler
-  - Redirects the student back to ../index.html (logout prototype).
+  - Redirects the student back to ../logout.php.
 
 - includeText change handler
   - Toggles visibility of the textSection textarea in the "Add Post" modal based on whether "Write Something" is checked.
@@ -47,18 +47,18 @@ File: student/community.html
 - deletePostModal hidden.bs.modal handler
   - Resets the select element, hides the confirmation section, and disables the delete button when the delete modal is closed.
 
-File: student/settings.html
+File: student/settings.php
 ---------------------------
 - logout-btn click handler
-  - Redirects the student back to ../index.html (logout prototype).
+  - Redirects the student back to ../logout.php.
 
-File: teacher/login.html
+File: teacher/login.php
 ------------------------
 - teacher-login-form submit handler
   - Prevents default form submission.
-  - Redirects to teacher/dashboard.html (teacher login prototype, no real authentication).
+  - Redirects to teacher/dashboard.php (teacher login prototype, no real authentication).
 
-File: teacher/dashboard.html
+File: teacher/dashboard.php
 ----------------------------
 - show-add-form button click handler
   - Shows the "Add Notification" card and scrolls to it smoothly.
@@ -110,9 +110,9 @@ File: teacher/dashboard.html
   - Hides the deleteNotificationModal (front-end only, no backend).
 
 - logout-btn click handler
-  - Redirects back to ../index.html (teacher logout prototype).
+  - Redirects back to ../logout.php.
 
-File: teacher/community.html
+File: teacher/community.php
 ----------------------------
 - showPostFormBtn click handler
   - Shows the "Add Post" card and scrolls to it smoothly.
@@ -165,9 +165,9 @@ File: teacher/community.html
   - Clears image input and preview.
 
 - logout-btn click handler
-  - Redirects back to ../index.html (teacher logout prototype).
+  - Redirects back to ../logout.php.
 
-File: teacher/settings.html
+File: teacher/settings.php
 ---------------------------
 - password-form submit handler
   - Prevents default submission.
@@ -179,4 +179,30 @@ File: teacher/settings.html
   - Logs the entered forwarding email and shows a prototype-only alert.
 
 - logout-btn click handler
-  - Redirects back to ../index.html (teacher logout prototype).
+  - Redirects back to ../logout.php.
+
+
+Recent Updates (Current PHP Pages)
+==================================
+
+File: student/dashboard.php
+---------------------------
+- replyModal show.bs.modal handler
+  - Reads notification sender data from the clicked Reply button (`data-recipient-email`, `data-recipient-id`, `data-recipient-name`, `data-notification-id`, `data-notification-preview`).
+  - Populates hidden form fields and auto-fills subject as `Re: <notification preview>`.
+
+- replyModal hidden.bs.modal handler
+  - Resets the reply form (`replyForm`) when the modal closes.
+
+- logout-btn click handler
+  - Redirects to `../logout.php`.
+
+File: community_supervisor/dashboard.php
+----------------------------------------
+- logout-btn click handler
+  - Redirects to `../logout.php`.
+
+File: community_supervisor/settings.php
+---------------------------------------
+- logout-btn click handler
+  - Redirects to `../logout.php`.

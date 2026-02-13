@@ -80,8 +80,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <div class="d-grid">
                                 <button type="submit" class="btn btn-primary">Login</button>
                             </div>
-                            <div class="d-grid mt-3">
-                                <a href="teacher/login.php" class="btn btn-secondary">Move to Teachers Login Page</a>
+                            <hr class="my-3">
+                            <p class="text-center text-muted mb-2">Other Login Options</p>
+                            <div class="d-grid gap-2">
+                                <a href="teacher/login.php" class="btn btn-outline-secondary">Teacher Login</a>
+                                <a href="community_supervisor/login.php" class="btn btn-outline-secondary">Community Supervisor Login</a>
+                                <a href="super_admin/login.php" class="btn btn-outline-secondary">Super Admin Login</a>
                             </div>
                         </form>
                     </div>

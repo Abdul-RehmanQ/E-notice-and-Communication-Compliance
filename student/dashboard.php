@@ -1,11 +1,46 @@
 <?php
 session_start();
 include '../config.php';
+include '../send_email.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../index.php");
     exit();
+}
+
+$error = '';
+$success = '';
+
+// Handle email reply
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_reply'])) {
+    $recipientEmail = trim($_POST['recipient_email']);
+    $recipientId = (int)$_POST['recipient_id'];
+    $notificationId = (int)$_POST['notification_id'];
+    $subject = trim($_POST['reply_subject']);
+    $message = trim($_POST['reply_message']);
+    
+    if (empty($recipientEmail) || empty($subject) || empty($message)) {
+        $error = "Please fill in all fields.";
+    } else {
+        // Format email body with HTML
+        $emailBody = "
+            <div style='font-family: Arial, sans-serif; padding: 20px;'>
+                <h3>" . htmlspecialchars($subject) . "</h3>
+                <p>" . nl2br(htmlspecialchars($message)) . "</p>
+                <hr>
+                <p style='color: #666; font-size: 12px;'>This message was sent via University Portal by " . htmlspecialchars($_SESSION['student_name']) . "</p>
+            </div>
+        ";
+        
+        $result = sendReplyEmail($conn, $_SESSION['user_id'], $recipientId, $recipientEmail, $subject, $emailBody, null);
+        
+        if ($result['success']) {
+            $success = "Email sent successfully to " . htmlspecialchars($recipientEmail) . "!";
+        } else {
+            $error = "Failed to send email: " . $result['error'];
+        }
+    }
 }
 
 // Fetch student data
@@ -14,6 +49,22 @@ $stmt->bind_param("i", $_SESSION['student_id']);
 $stmt->execute();
 $result = $stmt->get_result();
 $student = $result->fetch_assoc();
+$stmt->close();
+
+// Fetch notifications for this student (from teachers)
+$notifications = [];
+$stmt = $conn->prepare("SELECT n.*, t.name as teacher_name, u.email as teacher_email, t.teacher_id
+                        FROM notifications n 
+                        INNER JOIN teacher t ON n.sender_id = t.teacher_id 
+                        INNER JOIN user u ON t.teacher_id = u.user_id
+                        WHERE n.recipient_id = ? 
+                        ORDER BY n.created_at DESC");
+$stmt->bind_param("i", $_SESSION['student_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+while ($row = $result->fetch_assoc()) {
+    $notifications[] = $row;
+}
 $stmt->close();
 ?>
 <!DOCTYPE html>
@@ -126,30 +177,51 @@ $stmt->close();
                     <h2>Notifications</h2>
                     <h5 class="text-muted mb-3">Notifications from Teachers</h5>
 
-                    <div class="card mb-3 shadow-sm">
-                        <div class="card-body">
-                            <p>Assignment on Data Structures is due tomorrow.</p>
-                            <small class="text-muted">From: Dr. Smith</small>
-                            <br>
-                            <button class="btn btn-primary btn-sm mt-2">Reply</button>
+                    <?php if ($error): ?>
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <?php echo $error; ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
-                    </div>
-                    <div class="card mb-3 shadow-sm">
-                        <div class="card-body">
-                            <p>Class on Algorithms is cancelled today.</p>
-                            <small class="text-muted">From: Prof. Johnson</small>
-                            <br>
-                            <button class="btn btn-primary btn-sm mt-2">Reply</button>
+                    <?php endif; ?>
+                    
+                    <?php if ($success): ?>
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <?php echo $success; ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
-                    </div>
-                    <div class="card mb-3 shadow-sm">
-                        <div class="card-body">
-                            <p>Project submission deadline extended to next week.</p>
-                            <small class="text-muted">From: Dr. Smith</small>
-                            <br>
-                            <button class="btn btn-primary btn-sm mt-2">Reply</button>
+                    <?php endif; ?>
+
+                    <?php if (empty($notifications)): ?>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>No notifications yet.
                         </div>
-                    </div>
+                    <?php else: ?>
+                        <?php foreach ($notifications as $notification): ?>
+                            <div class="card mb-3 shadow-sm">
+                                <div class="card-body">
+                                    <p class="mb-2"><?php echo nl2br(htmlspecialchars($notification['message'])); ?></p>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-muted">
+                                            <i class="fas fa-user me-1"></i>From: <?php echo htmlspecialchars($notification['teacher_name']); ?>
+                                        </small>
+                                        <small class="text-muted">
+                                            <i class="fas fa-clock me-1"></i><?php echo date('M d, Y h:i A', strtotime($notification['created_at'])); ?>
+                                        </small>
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm mt-2"
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#replyModal"
+                                            data-recipient-email="<?php echo htmlspecialchars($notification['teacher_email']); ?>"
+                                            data-recipient-id="<?php echo $notification['teacher_id']; ?>"
+                                            data-recipient-name="<?php echo htmlspecialchars($notification['teacher_name']); ?>"
+                                            data-notification-id="<?php echo $notification['notification_id']; ?>"
+                                            data-notification-preview="<?php echo htmlspecialchars(substr($notification['message'], 0, 50)); ?>">
+                                        <i class="fas fa-reply me-1"></i>Reply
+                                    </button>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </div>
             </main>
         </div>
@@ -160,7 +232,71 @@ $stmt->close();
         document.getElementById('logout-btn').addEventListener('click', () => {
             window.location.href = '../logout.php';
         });
+
+        // Reply Modal - populate data when opened
+        document.getElementById('replyModal').addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            const recipientEmail = button.getAttribute('data-recipient-email');
+            const recipientId = button.getAttribute('data-recipient-id');
+            const recipientName = button.getAttribute('data-recipient-name');
+            const notificationId = button.getAttribute('data-notification-id');
+            const notificationPreview = button.getAttribute('data-notification-preview');
+
+            document.getElementById('replyRecipientEmail').value = recipientEmail;
+            document.getElementById('replyRecipientId').value = recipientId;
+            document.getElementById('replyNotificationId').value = notificationId;
+            document.getElementById('replyRecipientDisplay').textContent = recipientName + ' (' + recipientEmail + ')';
+            document.getElementById('replySubject').value = 'Re: ' + notificationPreview;
+        });
+
+        // Reset reply modal when closed
+        document.getElementById('replyModal').addEventListener('hidden.bs.modal', function () {
+            document.getElementById('replyForm').reset();
+        });
     </script>
+
+    <!-- Reply Modal -->
+    <div class="modal fade" id="replyModal" tabindex="-1" aria-labelledby="replyModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="" id="replyForm">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="replyModalLabel">
+                            <i class="fas fa-envelope me-2"></i>Reply via Email
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="recipient_email" id="replyRecipientEmail">
+                        <input type="hidden" name="recipient_id" id="replyRecipientId">
+                        <input type="hidden" name="notification_id" id="replyNotificationId">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">To:</label>
+                            <div class="form-control bg-light" id="replyRecipientDisplay"></div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="replySubject" class="form-label">Subject</label>
+                            <input type="text" class="form-control" id="replySubject" name="reply_subject" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="replyMessage" class="form-label">Message</label>
+                            <textarea class="form-control" id="replyMessage" name="reply_message" rows="5" required
+                                placeholder="Write your reply message here..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" name="send_reply" class="btn btn-primary">
+                            <i class="fas fa-paper-plane me-1"></i> Send Email
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>
