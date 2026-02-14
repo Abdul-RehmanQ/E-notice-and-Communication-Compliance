@@ -1,42 +1,43 @@
 <?php
 session_start();
 include '../config.php';
+require_once __DIR__ . '/teacher_guard.php';
 
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'teacher') {
-    header("Location: login.php");
-    exit();
-}
-
-$stmt = $conn->prepare("SELECT t.teacher_id, t.name, t.department, u.email
-                        FROM teacher t
-                        INNER JOIN user u ON t.teacher_id = u.user_id
-                        WHERE t.teacher_id = ? AND u.role = 'teacher'");
-$stmt->bind_param("i", $_SESSION['user_id']);
-$stmt->execute();
-$result = $stmt->get_result();
-$teacher = $result ? $result->fetch_assoc() : null;
-$stmt->close();
-
-if (!$teacher) {
-    session_unset();
-    session_destroy();
-    header("Location: login.php");
-    exit();
-}
-
-$_SESSION['teacher_id'] = $teacher['teacher_id'];
-$_SESSION['teacher_name'] = $teacher['name'];
-$_SESSION['teacher_department'] = $teacher['department'];
+$teacher = requireTeacherIdentity($conn);
 
 $success = '';
 $error = '';
 
+if (isset($_SESSION['teacher_flash']) && is_array($_SESSION['teacher_flash'])) {
+    $flashType = $_SESSION['teacher_flash']['type'] ?? '';
+    $flashMessage = $_SESSION['teacher_flash']['message'] ?? '';
+    if ($flashType === 'success') {
+        $success = (string)$flashMessage;
+    } elseif ($flashType === 'error') {
+        $error = (string)$flashMessage;
+    }
+    unset($_SESSION['teacher_flash']);
+}
+
+if (!function_exists('teacherRedirectWithFlash')) {
+    function teacherRedirectWithFlash(string $type, string $message): void
+    {
+        $_SESSION['teacher_flash'] = [
+            'type' => $type,
+            'message' => $message,
+        ];
+        header('Location: dashboard.php');
+        exit();
+    }
+}
+
 $assignedCourses = [];
-$assignedCourseStmt = $conn->prepare("SELECT DISTINCT c.course_id, c.course_code, c.course_title, c.department, c.semester_no
+$assignedCourseStmt = $conn->prepare("SELECT DISTINCT co.offering_id, co.session, co.section, co.semester_no, c.course_id, c.course_code, c.course_title, c.department
                                       FROM teacher_course_assignments tca
+                                      INNER JOIN course_offerings co ON co.offering_id = tca.offering_id
                                       INNER JOIN courses c ON c.course_id = tca.course_id
                                       WHERE tca.teacher_id = ?
-                                      ORDER BY c.course_code ASC");
+                                      ORDER BY c.course_code ASC, co.session ASC, co.section ASC");
 $assignedCourseStmt->bind_param("i", $teacher['teacher_id']);
 $assignedCourseStmt->execute();
 $assignedCourseResult = $assignedCourseStmt->get_result();
@@ -48,11 +49,11 @@ if ($assignedCourseResult) {
 $assignedCourseStmt->close();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification'])) {
-    $selectedCourseId = (int)($_POST['course_id'] ?? 0);
+    $selectedOfferingId = (int)($_POST['offering_id'] ?? 0);
     $message = trim($_POST['message'] ?? '');
 
-    if ($selectedCourseId <= 0) {
-        $error = 'Please select a course.';
+    if ($selectedOfferingId <= 0) {
+        $error = 'Please select a class offering.';
     } elseif ($message === '') {
         $error = 'Please enter a notification message.';
     } elseif (mb_strlen($message) > 2000) {
@@ -60,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
     } else {
         $selectedCourse = null;
         foreach ($assignedCourses as $course) {
-            if ((int)$course['course_id'] === $selectedCourseId) {
+            if ((int)$course['offering_id'] === $selectedOfferingId) {
                 $selectedCourse = $course;
                 break;
             }
@@ -68,33 +69,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
 
         $assignmentCheckStmt = $conn->prepare("SELECT assignment_id
                                                FROM teacher_course_assignments
-                                               WHERE teacher_id = ? AND course_id = ?
+                                               WHERE teacher_id = ? AND offering_id = ?
                                                LIMIT 1");
-        $assignmentCheckStmt->bind_param("ii", $teacher['teacher_id'], $selectedCourseId);
+        $assignmentCheckStmt->bind_param("ii", $teacher['teacher_id'], $selectedOfferingId);
         $assignmentCheckStmt->execute();
         $assignmentCheckResult = $assignmentCheckStmt->get_result();
-        $isAssignedToCourse = $assignmentCheckResult && $assignmentCheckResult->num_rows > 0;
+        $isAssignedToOffering = $assignmentCheckResult && $assignmentCheckResult->num_rows > 0;
         $assignmentCheckStmt->close();
 
-        if (!$isAssignedToCourse) {
-            $error = 'You can only send notifications for courses assigned to you.';
+        if (!$isAssignedToOffering) {
+            $error = 'You can only send notifications for class offerings assigned to you.';
         } else {
             $recipientIds = [];
-            $recipientSessions = [];
             $recipientStmt = $conn->prepare("SELECT DISTINCT sce.student_id
-                                             , s.session
                                              FROM student_course_enrollments sce
-                                             INNER JOIN student s ON s.student_id = sce.student_id
-                                             WHERE sce.course_id = ? AND sce.status = 'active'");
-            $recipientStmt->bind_param("i", $selectedCourseId);
+                                             WHERE sce.status = 'active'
+                                               AND sce.offering_id = ?");
+            $recipientStmt->bind_param("i", $selectedOfferingId);
             $recipientStmt->execute();
             $recipientResult = $recipientStmt->get_result();
             if ($recipientResult) {
                 while ($recipient = $recipientResult->fetch_assoc()) {
                     $recipientIds[] = (int)$recipient['student_id'];
-                    if (!empty($recipient['session'])) {
-                        $recipientSessions[$recipient['session']] = true;
-                    }
                 }
             }
             $recipientStmt->close();
@@ -115,20 +111,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
                 $insertStmt->close();
 
                 if ($insertedCount > 0) {
-                    $sessionLabel = 'N/A';
-                    if (!empty($recipientSessions)) {
-                        $sessionLabel = implode(', ', array_keys($recipientSessions));
-                    }
-
                     $courseCode = $selectedCourse['course_code'] ?? 'Selected Course';
-                    $semesterNo = $selectedCourse['semester_no'] ?? 'N/A';
-                    $success = "Notification sent for {$courseCode} (Semester {$semesterNo}, Session {$sessionLabel}) to {$insertedCount} student(s).";
+                    $semesterNo = (int)($selectedCourse['semester_no'] ?? 0);
+                    $sessionLabel = $selectedCourse['session'] ?? 'N/A';
+                    $sectionLabel = $selectedCourse['section'] ?? 'N/A';
+                    $success = "Notification sent for {$courseCode} (Session {$sessionLabel}, Semester {$semesterNo}, Section {$sectionLabel}) to {$insertedCount} student(s).";
                 } else {
                     $error = 'Failed to send notification. Please try again.';
                 }
             }
         }
     }
+
+    if ($error !== '') {
+        teacherRedirectWithFlash('error', $error);
+    }
+
+    if ($success !== '') {
+        teacherRedirectWithFlash('success', $success);
+    }
+
+    teacherRedirectWithFlash('error', 'Unable to process notification request.');
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification'])) {
@@ -164,6 +167,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification']
             $deleteStmt->close();
         }
     }
+
+    if ($error !== '') {
+        teacherRedirectWithFlash('error', $error);
+    }
+
+    if ($success !== '') {
+        teacherRedirectWithFlash('success', $success);
+    }
+
+    teacherRedirectWithFlash('error', 'Unable to process delete request.');
 }
 
 $sentNotifications = [];
@@ -321,12 +334,15 @@ $sentStmt->close();
                         <div class="card-body">
                             <form id="add-notification-form" method="POST" action="">
                                 <div class="mb-3">
-                                    <label for="course_id" class="form-label">Assigned Course</label>
-                                    <select class="form-select" id="course_id" name="course_id" required>
-                                        <option value="" selected disabled>Select assigned course</option>
+                                    <label for="offering_id" class="form-label">Assigned Class Offering</label>
+                                    <select class="form-select" id="offering_id" name="offering_id" required>
+                                        <option value="" selected disabled>Select assigned class offering</option>
                                         <?php foreach ($assignedCourses as $course): ?>
-                                            <option value="<?php echo (int)$course['course_id']; ?>">
+                                            <option value="<?php echo (int)$course['offering_id']; ?>">
                                                 <?php echo htmlspecialchars($course['course_code'] . ' - ' . $course['course_title']); ?>
+                                                | <?php echo htmlspecialchars($course['session']); ?>
+                                                | Sem <?php echo (int)$course['semester_no']; ?>
+                                                | Sec <?php echo htmlspecialchars($course['section']); ?>
                                             </option>
                                         <?php endforeach; ?>
                                     </select>

@@ -1,12 +1,10 @@
 <?php
 session_start();
 include '../config.php';
+require_once __DIR__ . '/supervisor_guard.php';
 
-// Check if user is logged in as supervisor
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'community_supervisor') {
-    header("Location: login.php");
-    exit();
-}
+$supervisor = requireSupervisorIdentity($conn);
+$supervisorUserId = (int)$supervisor['user_id'];
 
 $password_error = '';
 $password_success = '';
@@ -18,8 +16,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
     $repeatNewPassword = $_POST['repeatNewPassword'];
     
     // Fetch current password from DB
-    $stmt = $conn->prepare("SELECT password FROM user WHERE user_id = ?");
-    $stmt->bind_param("i", $_SESSION['user_id']);
+    $stmt = $conn->prepare("SELECT password FROM user WHERE user_id = ? AND role = 'community_supervisor'");
+    $stmt->bind_param("i", $supervisorUserId);
     $stmt->execute();
     $result = $stmt->get_result();
     $user = $result->fetch_assoc();
@@ -35,8 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
         $password_error = "Password must be at least 6 characters!";
     } else {
         $hashedPassword = hashPasswordArgon2id($newPassword);
-        $updateStmt = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ?");
-        $updateStmt->bind_param("si", $hashedPassword, $_SESSION['user_id']);
+        $updateStmt = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ? AND role = 'community_supervisor'");
+        $updateStmt->bind_param("si", $hashedPassword, $supervisorUserId);
         if ($updateStmt->execute()) {
             $password_success = "Password updated successfully!";
         } else {

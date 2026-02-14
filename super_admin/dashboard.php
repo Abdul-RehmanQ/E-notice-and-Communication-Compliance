@@ -91,9 +91,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_students'])) {
                 }
 
                 if ($studentHasEmailColumn) {
-                    $upsertStudentStmt = $conn->prepare("INSERT INTO student (student_id, name, Roll_no, department, semester_no, session, email) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), Roll_no = VALUES(Roll_no), department = VALUES(department), semester_no = VALUES(semester_no), session = VALUES(session), email = VALUES(email)");
+                    $upsertStudentStmt = $conn->prepare("INSERT INTO student (student_id, name, Roll_no, department, semester_no, section, session, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), Roll_no = VALUES(Roll_no), department = VALUES(department), semester_no = VALUES(semester_no), section = VALUES(section), session = VALUES(session), email = VALUES(email)");
                 } else {
-                    $upsertStudentStmt = $conn->prepare("INSERT INTO student (student_id, name, Roll_no, department, semester_no, session) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), Roll_no = VALUES(Roll_no), department = VALUES(department), semester_no = VALUES(semester_no), session = VALUES(session)");
+                    $upsertStudentStmt = $conn->prepare("INSERT INTO student (student_id, name, Roll_no, department, semester_no, section, session) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), Roll_no = VALUES(Roll_no), department = VALUES(department), semester_no = VALUES(semester_no), section = VALUES(section), session = VALUES(session)");
                 }
 
                 $requiredColumns = [
@@ -104,6 +104,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_students'])) {
                     'session' => ['session'],
                     'department' => ['department', 'dept'],
                     'semester_no' => ['semester_no', 'semester', 'sem', 'semester_number']
+                ];
+
+                $optionalColumns = [
+                    'section' => ['section', 'sec']
                 ];
 
                 $getColumnValue = function (array $rowCells, array $map, array $aliases): string {
@@ -164,6 +168,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_students'])) {
                         $department = $getColumnValue($cells, $headerMap, $requiredColumns['department']);
                         $semesterRaw = $getColumnValue($cells, $headerMap, $requiredColumns['semester_no']);
                         $semesterNo = (int)$semesterRaw;
+                        $section = strtoupper($getColumnValue($cells, $headerMap, $optionalColumns['section']));
+                        if ($section === '') {
+                            $section = 'A';
+                        }
 
                         if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                             $importErrors[] = "Row {$rowNumber}: Invalid or missing email.";
@@ -203,6 +211,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_students'])) {
                         }
                         if ($semesterNo < 1 || $semesterNo > 12) {
                             $importErrors[] = "Row {$rowNumber}: Semester must be between 1 and 12.";
+                            continue;
+                        }
+                        if (!preg_match('/^[A-Z0-9_-]{1,10}$/', $section)) {
+                            $importErrors[] = "Row {$rowNumber}: Section is invalid. Use alphanumeric values like A or B.";
                             continue;
                         }
 
@@ -250,9 +262,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_students'])) {
                         }
 
                         if ($studentHasEmailColumn) {
-                            $upsertStudentStmt->bind_param("isssiss", $userId, $name, $rollNo, $department, $semesterNo, $sessionValue, $email);
+                            $upsertStudentStmt->bind_param("isssisss", $userId, $name, $rollNo, $department, $semesterNo, $section, $sessionValue, $email);
                         } else {
-                            $upsertStudentStmt->bind_param("isssis", $userId, $name, $rollNo, $department, $semesterNo, $sessionValue);
+                            $upsertStudentStmt->bind_param("isssiss", $userId, $name, $rollNo, $department, $semesterNo, $section, $sessionValue);
                         }
                         if (!$upsertStudentStmt->execute()) {
                             $importErrors[] = "Row {$rowNumber}: Failed to upsert student profile ({$conn->error}).";
@@ -660,46 +672,72 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_courses'])) {
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['assign_course'])) {
     $teacherId = (int)($_POST['teacher_id'] ?? 0);
     $courseId = (int)($_POST['course_id'] ?? 0);
+    $offeringSession = trim($_POST['offering_session'] ?? '');
+    $offeringSemester = (int)($_POST['offering_semester_no'] ?? 0);
+    $offeringSection = strtoupper(trim($_POST['offering_section'] ?? ''));
 
-    if ($teacherId <= 0 || $courseId <= 0) {
-        $error = 'Please select both teacher and course.';
+    if ($teacherId <= 0 || $courseId <= 0 || $offeringSession === '' || $offeringSemester <= 0 || $offeringSection === '') {
+        $error = 'Please select teacher, course, session, semester, and section.';
     } elseif ($adminDepartment === '') {
         $error = 'Department scope is not configured for this super admin.';
+    } elseif (!preg_match('/^[A-Z0-9_-]{1,10}$/', $offeringSection)) {
+        $error = 'Section is invalid. Use values like A or B.';
     } else {
-        $scopeStmt = $conn->prepare("SELECT COUNT(*) AS matched_count
+        $scopeStmt = $conn->prepare("SELECT t.department AS teacher_department, c.department AS course_department, c.semester_no AS course_semester
                                      FROM teacher t
                                      INNER JOIN courses c ON c.course_id = ?
                                      WHERE t.teacher_id = ?
-                                       AND LOWER(TRIM(t.department)) = LOWER(TRIM(?))
-                                       AND LOWER(TRIM(c.department)) = LOWER(TRIM(?))");
-        $scopeStmt->bind_param("iiss", $courseId, $teacherId, $adminDepartment, $adminDepartment);
+                                     LIMIT 1");
+        $scopeStmt->bind_param("ii", $courseId, $teacherId);
         $scopeStmt->execute();
         $scopeResult = $scopeStmt->get_result();
-        $scopeRow = $scopeResult ? $scopeResult->fetch_assoc() : ['matched_count' => 0];
+        $scopeRow = $scopeResult ? $scopeResult->fetch_assoc() : null;
         $scopeStmt->close();
 
-        if ((int)($scopeRow['matched_count'] ?? 0) === 0) {
-            $error = 'Assignment blocked: teacher and course must belong to your department.';
-        } else {
-        $checkStmt = $conn->prepare("SELECT assignment_id FROM teacher_course_assignments WHERE teacher_id = ? AND course_id = ?");
-        $checkStmt->bind_param("ii", $teacherId, $courseId);
-        $checkStmt->execute();
-        $existing = $checkStmt->get_result();
-        $alreadyExists = $existing && $existing->num_rows > 0;
-        $checkStmt->close();
+        $teacherDepartment = trim((string)($scopeRow['teacher_department'] ?? ''));
+        $courseDepartment = trim((string)($scopeRow['course_department'] ?? ''));
+        $courseSemester = (int)($scopeRow['course_semester'] ?? 0);
 
-        if ($alreadyExists) {
-            $error = 'This teacher is already assigned to the selected course.';
+        if ($teacherDepartment === '' || $courseDepartment === '') {
+            $error = 'Selected teacher or course was not found.';
+        } elseif (strcasecmp($teacherDepartment, $adminDepartment) !== 0 || strcasecmp($courseDepartment, $adminDepartment) !== 0) {
+            $error = 'Assignment blocked: teacher and course must belong to your department.';
+        } elseif ($offeringSemester !== $courseSemester) {
+            $error = "Selected semester does not match course semester ({$courseSemester}).";
         } else {
-            $stmt = $conn->prepare("INSERT INTO teacher_course_assignments (teacher_id, course_id, assigned_by) VALUES (?, ?, ?)");
-            $stmt->bind_param("iii", $teacherId, $courseId, $adminId);
-            if ($stmt->execute()) {
-                $success = 'Course assigned to teacher successfully.';
+            $offeringStmt = $conn->prepare("INSERT INTO course_offerings (course_id, department, session, semester_no, section)
+                                            VALUES (?, ?, ?, ?, ?)
+                                            ON DUPLICATE KEY UPDATE offering_id = LAST_INSERT_ID(offering_id)");
+            $offeringStmt->bind_param("issis", $courseId, $adminDepartment, $offeringSession, $offeringSemester, $offeringSection);
+
+            if (!$offeringStmt->execute()) {
+                $error = 'Failed to create or resolve class offering: ' . $conn->error;
             } else {
-                $error = 'Failed to assign course: ' . $conn->error;
+                $offeringId = (int)$conn->insert_id;
+
+                $checkStmt = $conn->prepare("SELECT assignment_id FROM teacher_course_assignments WHERE offering_id = ? LIMIT 1");
+                $checkStmt->bind_param("i", $offeringId);
+                $checkStmt->execute();
+                $existing = $checkStmt->get_result();
+                $alreadyExists = $existing && $existing->num_rows > 0;
+                $checkStmt->close();
+
+                if ($alreadyExists) {
+                    $error = 'This class offering already has a teacher assigned.';
+                } else {
+                    $stmt = $conn->prepare("INSERT INTO teacher_course_assignments (teacher_id, course_id, offering_id, assigned_by) VALUES (?, ?, ?, ?)");
+                    $stmt->bind_param("iiii", $teacherId, $courseId, $offeringId, $adminId);
+                    if ($stmt->execute()) {
+                        $success = "Course assigned successfully for Session {$offeringSession}, Semester {$offeringSemester}, Section {$offeringSection}.";
+                    } else {
+                        $error = 'Failed to assign course: ' . $conn->error;
+                    }
+                    $stmt->close();
+                }
             }
-            $stmt->close();
-        }
+            if ($offeringStmt) {
+                $offeringStmt->close();
+            }
         }
     }
 
@@ -709,63 +747,81 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['assign_course'])) {
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['enroll_student'])) {
     $studentId = (int)($_POST['student_id'] ?? 0);
     $courseId = (int)($_POST['enroll_course_id'] ?? 0);
+    $enrollDepartment = trim($_POST['enroll_department'] ?? '');
+    $enrollSession = trim($_POST['enroll_session'] ?? '');
+    $enrollSemester = (int)($_POST['enroll_semester_no'] ?? 0);
+    $enrollSection = strtoupper(trim($_POST['enroll_section'] ?? ''));
 
-    if ($studentId <= 0 || $courseId <= 0) {
-        $error = 'Please select both student and course.';
+    if ($studentId <= 0 || $courseId <= 0 || $enrollDepartment === '' || $enrollSession === '' || $enrollSemester <= 0 || $enrollSection === '') {
+        $error = 'Please select department, course, session, semester, and section.';
     } elseif ($adminDepartment === '') {
         $error = 'Department scope is not configured for this super admin.';
+    } elseif (strcasecmp($enrollDepartment, $adminDepartment) !== 0) {
+        $error = 'Enrollment blocked: you can only enroll students from your own department.';
+    } elseif (!preg_match('/^[A-Z0-9_-]{1,10}$/', $enrollSection)) {
+        $error = 'Section is invalid. Use values like A or B.';
     } else {
-        $scopeStmt = $conn->prepare("SELECT COUNT(*) AS matched_count
-                                     FROM student s
-                                     INNER JOIN courses c ON c.course_id = ?
-                                     WHERE s.student_id = ?
-                                       AND LOWER(TRIM(s.department)) = LOWER(TRIM(?))
-                                       AND LOWER(TRIM(c.department)) = LOWER(TRIM(?))");
-        $scopeStmt->bind_param("iiss", $courseId, $studentId, $adminDepartment, $adminDepartment);
-        $scopeStmt->execute();
-        $scopeResult = $scopeStmt->get_result();
-        $scopeRow = $scopeResult ? $scopeResult->fetch_assoc() : ['matched_count' => 0];
-        $scopeStmt->close();
+        $studentScopeStmt = $conn->prepare("SELECT department, session, semester_no, section
+                                            FROM student
+                                            WHERE student_id = ?
+                                            LIMIT 1");
+        $studentScopeStmt->bind_param("i", $studentId);
+        $studentScopeStmt->execute();
+        $studentScopeResult = $studentScopeStmt->get_result();
+        $studentScopeRow = $studentScopeResult ? $studentScopeResult->fetch_assoc() : null;
+        $studentScopeStmt->close();
 
-        if ((int)($scopeRow['matched_count'] ?? 0) === 0) {
-            $error = 'Enrollment blocked: student and course must belong to your department.';
+        if (!$studentScopeRow) {
+            $error = 'Selected student was not found.';
+        } elseif (
+            strcasecmp(trim((string)$studentScopeRow['department']), $enrollDepartment) !== 0
+            || strcasecmp(trim((string)$studentScopeRow['session']), $enrollSession) !== 0
+            || (int)$studentScopeRow['semester_no'] !== $enrollSemester
+            || strcasecmp(strtoupper(trim((string)$studentScopeRow['section'])), $enrollSection) !== 0
+        ) {
+            $error = 'Selected student does not match the chosen department/session/semester/section.';
         } else {
-        $assignmentScopeStmt = $conn->prepare("SELECT COUNT(*) AS assigned_count
-                                               FROM teacher_course_assignments tca
-                                               INNER JOIN teacher t ON t.teacher_id = tca.teacher_id
-                                               INNER JOIN courses c ON c.course_id = tca.course_id
-                                               WHERE tca.course_id = ?
-                                                 AND LOWER(TRIM(t.department)) = LOWER(TRIM(?))
-                                                 AND LOWER(TRIM(c.department)) = LOWER(TRIM(?))");
-        $assignmentScopeStmt->bind_param("iss", $courseId, $adminDepartment, $adminDepartment);
-        $assignmentScopeStmt->execute();
-        $assignmentScopeResult = $assignmentScopeStmt->get_result();
-        $assignmentScopeRow = $assignmentScopeResult ? $assignmentScopeResult->fetch_assoc() : ['assigned_count' => 0];
-        $assignmentScopeStmt->close();
+            $offeringStmt = $conn->prepare("SELECT co.offering_id, co.course_id
+                                            FROM course_offerings co
+                                            INNER JOIN teacher_course_assignments tca ON tca.offering_id = co.offering_id
+                                            WHERE co.course_id = ?
+                                              AND LOWER(TRIM(co.department)) = LOWER(TRIM(?))
+                                              AND co.session = ?
+                                              AND co.semester_no = ?
+                                              AND UPPER(TRIM(co.section)) = ?
+                                            LIMIT 1");
+            $offeringStmt->bind_param("issis", $courseId, $enrollDepartment, $enrollSession, $enrollSemester, $enrollSection);
+            $offeringStmt->execute();
+            $offeringResult = $offeringStmt->get_result();
+            $offeringRow = $offeringResult ? $offeringResult->fetch_assoc() : null;
+            $offeringStmt->close();
 
-        if ((int)($assignmentScopeRow['assigned_count'] ?? 0) === 0) {
-            $error = 'Enrollment blocked: selected course has no teacher assigned yet.';
-        } else {
-        $checkStmt = $conn->prepare("SELECT enrollment_id FROM student_course_enrollments WHERE student_id = ? AND course_id = ?");
-        $checkStmt->bind_param("ii", $studentId, $courseId);
-        $checkStmt->execute();
-        $existing = $checkStmt->get_result();
-        $alreadyExists = $existing && $existing->num_rows > 0;
-        $checkStmt->close();
-
-        if ($alreadyExists) {
-            $error = 'This student is already enrolled in the selected course.';
-        } else {
-            $stmt = $conn->prepare("INSERT INTO student_course_enrollments (student_id, course_id, enrolled_by) VALUES (?, ?, ?)");
-            $stmt->bind_param("iii", $studentId, $courseId, $adminId);
-            if ($stmt->execute()) {
-                $success = 'Student enrolled successfully.';
+            if (!$offeringRow) {
+                $error = 'Enrollment blocked: no teacher is assigned for the selected class offering.';
             } else {
-                $error = 'Enrollment failed: ' . $conn->error;
+                $offeringId = (int)$offeringRow['offering_id'];
+                $offeringCourseId = (int)$offeringRow['course_id'];
+
+                $checkStmt = $conn->prepare("SELECT enrollment_id FROM student_course_enrollments WHERE student_id = ? AND offering_id = ?");
+                $checkStmt->bind_param("ii", $studentId, $offeringId);
+                $checkStmt->execute();
+                $existing = $checkStmt->get_result();
+                $alreadyExists = $existing && $existing->num_rows > 0;
+                $checkStmt->close();
+
+                if ($alreadyExists) {
+                    $error = 'This student is already enrolled in the selected class offering.';
+                } else {
+                    $stmt = $conn->prepare("INSERT INTO student_course_enrollments (student_id, course_id, offering_id, enrolled_by) VALUES (?, ?, ?, ?)");
+                    $stmt->bind_param("iiii", $studentId, $offeringCourseId, $offeringId, $adminId);
+                    if ($stmt->execute()) {
+                        $success = 'Student enrolled successfully.';
+                    } else {
+                        $error = 'Enrollment failed: ' . $conn->error;
+                    }
+                    $stmt->close();
+                }
             }
-            $stmt->close();
-        }
-        }
         }
     }
 
@@ -776,46 +832,50 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['enroll_student_group']
     $groupDepartment = trim($_POST['group_department'] ?? '');
     $groupSession = trim($_POST['group_session'] ?? '');
     $groupSemester = (int)($_POST['group_semester_no'] ?? 0);
+    $groupSection = strtoupper(trim($_POST['group_section'] ?? ''));
     $courseId = (int)($_POST['group_enroll_course_id'] ?? 0);
 
-    if ($groupDepartment === '' || $groupSession === '' || $groupSemester <= 0 || $courseId <= 0) {
-        $error = 'Please select department, session, semester, and course for group enrollment.';
+    if ($groupDepartment === '' || $groupSession === '' || $groupSemester <= 0 || $groupSection === '' || $courseId <= 0) {
+        $error = 'Please select department, session, semester, section, and course for group enrollment.';
     } elseif ($adminDepartment === '') {
         $error = 'Department scope is not configured for this super admin.';
     } elseif (strcasecmp(trim($groupDepartment), trim($adminDepartment)) !== 0) {
         $error = 'Group enrollment blocked: you can only enroll students from your own department.';
+    } elseif (!preg_match('/^[A-Z0-9_-]{1,10}$/', $groupSection)) {
+        $error = 'Section is invalid. Use values like A or B.';
     } else {
-                $courseSemesterStmt = $conn->prepare("SELECT c.semester_no,
-                                                                                                         (SELECT COUNT(*)
-                                                                                                            FROM teacher_course_assignments tca
-                                                                                                            INNER JOIN teacher t ON t.teacher_id = tca.teacher_id
-                                                                                                            WHERE tca.course_id = c.course_id
-                                                                                                                AND LOWER(TRIM(t.department)) = LOWER(TRIM(?))) AS assigned_count
-                                                                                            FROM courses c
-                                                                                            WHERE c.course_id = ?");
-                $courseSemesterStmt->bind_param("si", $adminDepartment, $courseId);
-                $courseSemesterStmt->execute();
-                $courseSemesterResult = $courseSemesterStmt->get_result();
-                $courseRow = $courseSemesterResult ? $courseSemesterResult->fetch_assoc() : null;
-                $courseSemesterStmt->close();
+        $offeringStmt = $conn->prepare("SELECT co.offering_id, co.course_id
+                                        FROM course_offerings co
+                                        INNER JOIN teacher_course_assignments tca ON tca.offering_id = co.offering_id
+                                        WHERE co.course_id = ?
+                                          AND LOWER(TRIM(co.department)) = LOWER(TRIM(?))
+                                          AND co.session = ?
+                                          AND co.semester_no = ?
+                                          AND UPPER(TRIM(co.section)) = ?
+                                        LIMIT 1");
+        $offeringStmt->bind_param("issis", $courseId, $groupDepartment, $groupSession, $groupSemester, $groupSection);
+        $offeringStmt->execute();
+        $offeringResult = $offeringStmt->get_result();
+        $offeringRow = $offeringResult ? $offeringResult->fetch_assoc() : null;
+        $offeringStmt->close();
 
-        if (!$courseRow) {
-            $error = 'Selected course was not found.';
-        } elseif ((int)($courseRow['assigned_count'] ?? 0) === 0) {
-            $error = 'Group enrollment blocked: selected course has no teacher assigned yet.';
-        } elseif ((int)$courseRow['semester_no'] !== $groupSemester) {
-            $error = 'Course semester does not match selected student semester.';
+        if (!$offeringRow) {
+            $error = 'Group enrollment blocked: selected class offering has no teacher assignment.';
         } else {
-            $insertGroupStmt = $conn->prepare("INSERT INTO student_course_enrollments (student_id, course_id, enrolled_by)
-                                               SELECT s.student_id, ?, ?
+            $offeringId = (int)$offeringRow['offering_id'];
+            $offeringCourseId = (int)$offeringRow['course_id'];
+
+            $insertGroupStmt = $conn->prepare("INSERT INTO student_course_enrollments (student_id, course_id, offering_id, enrolled_by)
+                                               SELECT s.student_id, ?, ?, ?
                                                FROM student s
                                                LEFT JOIN student_course_enrollments sce
-                                                 ON sce.student_id = s.student_id AND sce.course_id = ?
+                                                 ON sce.student_id = s.student_id AND sce.offering_id = ?
                                                WHERE s.department = ?
                                                  AND s.session = ?
                                                  AND s.semester_no = ?
+                                                 AND UPPER(TRIM(s.section)) = ?
                                                  AND sce.student_id IS NULL");
-            $insertGroupStmt->bind_param("iiissi", $courseId, $adminId, $courseId, $groupDepartment, $groupSession, $groupSemester);
+            $insertGroupStmt->bind_param("iiiissis", $offeringCourseId, $offeringId, $adminId, $offeringId, $groupDepartment, $groupSession, $groupSemester, $groupSection);
 
             if ($insertGroupStmt->execute()) {
                 $addedCount = $insertGroupStmt->affected_rows;
@@ -847,7 +907,7 @@ if ($teacherResult) {
 $teacherStmt->close();
 
 $students = [];
-$studentStmt = $conn->prepare("SELECT student_id, name, Roll_no, department, session, semester_no FROM student WHERE LOWER(TRIM(department)) = LOWER(TRIM(?)) ORDER BY department ASC, session ASC, semester_no ASC, name ASC");
+$studentStmt = $conn->prepare("SELECT student_id, name, Roll_no, department, session, semester_no, section FROM student WHERE LOWER(TRIM(department)) = LOWER(TRIM(?)) ORDER BY department ASC, session ASC, semester_no ASC, section ASC, name ASC");
 $studentStmt->bind_param("s", $adminDepartment);
 $studentStmt->execute();
 $studentResult = $studentStmt->get_result();
@@ -862,13 +922,18 @@ $studentsByGroup = [];
 $groupDepartments = [];
 $groupSessions = [];
 $groupSemesters = [];
+$groupSections = [];
 
 foreach ($students as $student) {
     $department = $student['department'] ?? 'Unknown';
     $sessionValue = $student['session'] ?? 'Unknown';
     $semesterValue = (int)($student['semester_no'] ?? 0);
+    $sectionValue = strtoupper(trim((string)($student['section'] ?? 'A')));
+    if ($sectionValue === '') {
+        $sectionValue = 'A';
+    }
 
-    $groupKey = $department . ' | ' . $sessionValue . ' | Sem ' . $semesterValue;
+    $groupKey = $department . ' | ' . $sessionValue . ' | Sem ' . $semesterValue . ' | Section ' . $sectionValue;
     if (!isset($studentsByGroup[$groupKey])) {
         $studentsByGroup[$groupKey] = [];
     }
@@ -879,15 +944,18 @@ foreach ($students as $student) {
     if ($semesterValue > 0) {
         $groupSemesters[$semesterValue] = true;
     }
+    $groupSections[$sectionValue] = true;
 }
 
 ksort($studentsByGroup);
 $groupDepartments = array_keys($groupDepartments);
 $groupSessions = array_keys($groupSessions);
 $groupSemesters = array_keys($groupSemesters);
+$groupSections = array_keys($groupSections);
 sort($groupDepartments);
 sort($groupSessions);
 sort($groupSemesters, SORT_NUMERIC);
+sort($groupSections);
 
 $courses = [];
 $courseStmt = $conn->prepare("SELECT course_id, course_code, course_title, department, semester_no FROM courses WHERE LOWER(TRIM(department)) = LOWER(TRIM(?)) ORDER BY course_code ASC");
@@ -920,13 +988,23 @@ if ($enrollableCourseResult) {
 $enrollableCourseStmt->close();
 
 $recentAssignments = [];
-$assignmentStmt = $conn->prepare("SELECT tca.assigned_at, t.name AS teacher_name, c.course_code, c.course_title, u.email AS assigned_by_email
+$assignmentStmt = $conn->prepare("SELECT MAX(tca.assigned_at) AS assigned_at,
+                                         co.session,
+                                         co.semester_no,
+                                         co.section,
+                                         COUNT(*) AS assigned_count,
+                          GROUP_CONCAT(DISTINCT CONCAT(c.course_code, ' - ', c.course_title) ORDER BY c.course_code SEPARATOR ' | ') AS course_list,
+                                         GROUP_CONCAT(DISTINCT t.name ORDER BY t.name SEPARATOR ', ') AS teacher_names,
+                                         u.email AS assigned_by_email
                                   FROM teacher_course_assignments tca
                                   INNER JOIN teacher t ON t.teacher_id = tca.teacher_id
                                   INNER JOIN courses c ON c.course_id = tca.course_id
+                                  INNER JOIN course_offerings co ON co.offering_id = tca.offering_id
                                   INNER JOIN user u ON u.user_id = tca.assigned_by
                                   WHERE LOWER(TRIM(t.department)) = LOWER(TRIM(?))
-                                  ORDER BY tca.assigned_at DESC LIMIT 10");
+                      GROUP BY co.session, co.semester_no, co.section, u.email
+                                  ORDER BY assigned_at DESC
+                                  LIMIT 10");
 $assignmentStmt->bind_param("s", $adminDepartment);
 $assignmentStmt->execute();
 $assignmentResult = $assignmentStmt->get_result();
@@ -938,13 +1016,23 @@ if ($assignmentResult) {
 $assignmentStmt->close();
 
 $recentEnrollments = [];
-$enrollmentStmt = $conn->prepare("SELECT sce.enrolled_at, s.name AS student_name, s.Roll_no, c.course_code, c.course_title, u.email AS enrolled_by_email
+$enrollmentStmt = $conn->prepare("SELECT MAX(sce.enrolled_at) AS enrolled_at,
+                                         c.course_code,
+                                         c.course_title,
+                                         co.session,
+                                         co.semester_no,
+                                         co.section,
+                                         COUNT(*) AS enrolled_count,
+                                         u.email AS enrolled_by_email
                                   FROM student_course_enrollments sce
                                   INNER JOIN student s ON s.student_id = sce.student_id
                                   INNER JOIN courses c ON c.course_id = sce.course_id
+                                  INNER JOIN course_offerings co ON co.offering_id = sce.offering_id
                                   INNER JOIN user u ON u.user_id = sce.enrolled_by
                                   WHERE LOWER(TRIM(s.department)) = LOWER(TRIM(?))
-                                  ORDER BY sce.enrolled_at DESC LIMIT 10");
+                                  GROUP BY sce.offering_id, c.course_code, c.course_title, co.session, co.semester_no, co.section, u.email
+                                  ORDER BY enrolled_at DESC
+                                  LIMIT 10");
 $enrollmentStmt->bind_param("s", $adminDepartment);
 $enrollmentStmt->execute();
 $enrollmentResult = $enrollmentStmt->get_result();
@@ -1128,7 +1216,7 @@ $countStmt->close();
                                 <div class="card shadow-sm h-100">
                                     <div class="card-header"><h5 class="mb-0">Import Students from Excel/CSV</h5></div>
                                     <div class="card-body">
-                                        <p class="text-muted mb-3">Headers: <strong>email, name, password, roll_no, session, department, semester_no</strong></p>
+                                        <p class="text-muted mb-3">Headers: <strong>email, name, password, roll_no, session, department, semester_no</strong> (+ optional <strong>section</strong>)</p>
                                         <form method="POST" action="" enctype="multipart/form-data">
                                             <div class="row g-3 align-items-end">
                                                 <div class="col-md-12">
@@ -1179,19 +1267,28 @@ $countStmt->close();
                                                         <?php endforeach; ?>
                                                     </select>
                                                 </div>
-                                                <div class="col-md-4">
+                                                <div class="col-md-2">
+                                                    <label for="group_section" class="form-label">Section</label>
+                                                    <select class="form-select" id="group_section" name="group_section" required>
+                                                        <option value="">Select</option>
+                                                        <?php foreach ($groupSections as $sectionValue): ?>
+                                                            <option value="<?php echo htmlspecialchars($sectionValue); ?>"><?php echo htmlspecialchars($sectionValue); ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-2">
                                                     <label for="group_enroll_course_id" class="form-label">Course</label>
                                                     <select class="form-select" id="group_enroll_course_id" name="group_enroll_course_id" required>
                                                         <option value="">Select Course</option>
-                                                        <?php foreach ($enrollableCourses as $course): ?>
+                                                        <?php foreach ($courses as $course): ?>
                                                             <option value="<?php echo (int)$course['course_id']; ?>">
                                                                 <?php echo htmlspecialchars($course['course_code']); ?> - <?php echo htmlspecialchars($course['course_title']); ?>
                                                                 (Sem <?php echo (int)$course['semester_no']; ?>)
                                                             </option>
                                                         <?php endforeach; ?>
                                                     </select>
-                                                    <?php if (empty($enrollableCourses)): ?>
-                                                        <small class="text-muted d-block mt-1">No courses available. Assign a teacher first.</small>
+                                                    <?php if (empty($courses)): ?>
+                                                        <small class="text-muted d-block mt-1">No courses available.</small>
                                                     <?php endif; ?>
                                                 </div>
                                             </div>
@@ -1215,8 +1312,16 @@ $countStmt->close();
                                             <ul class="list-group list-group-flush">
                                                 <?php foreach ($recentEnrollments as $item): ?>
                                                     <li class="list-group-item px-0">
-                                                        <strong><?php echo htmlspecialchars($item['student_name']); ?></strong>
-                                                        → <?php echo htmlspecialchars($item['course_code']); ?>
+                                                        <strong><?php echo htmlspecialchars($item['course_code']); ?></strong>
+                                                        - <?php echo htmlspecialchars($item['course_title']); ?>
+                                                        <br>
+                                                        <small class="text-muted">
+                                                            Session <?php echo htmlspecialchars($item['session']); ?> | Semester <?php echo (int)$item['semester_no']; ?> | Section <?php echo htmlspecialchars($item['section']); ?>
+                                                        </small>
+                                                        <br>
+                                                        <small class="text-muted">
+                                                            Enrolled: <?php echo (int)$item['enrolled_count']; ?> student(s)
+                                                        </small>
                                                         <br>
                                                         <small class="text-muted">
                                                             <?php echo date('M d, Y h:i A', strtotime($item['enrolled_at'])); ?>
@@ -1308,6 +1413,23 @@ $countStmt->close();
                                                 <?php endforeach; ?>
                                             </select>
                                         </div>
+                                        <div class="mb-3">
+                                            <label for="offering_session" class="form-label">Session</label>
+                                            <input type="text" class="form-control" id="offering_session" name="offering_session" placeholder="e.g. 2022-2026" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="offering_semester_no" class="form-label">Semester</label>
+                                            <select class="form-select" id="offering_semester_no" name="offering_semester_no" required>
+                                                <option value="">Select Semester</option>
+                                                <?php for ($semesterOption = 1; $semesterOption <= 12; $semesterOption++): ?>
+                                                    <option value="<?php echo $semesterOption; ?>"><?php echo $semesterOption; ?></option>
+                                                <?php endfor; ?>
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="offering_section" class="form-label">Section</label>
+                                            <input type="text" class="form-control" id="offering_section" name="offering_section" placeholder="A / B" maxlength="10" required>
+                                        </div>
                                         <button type="submit" name="assign_course" class="btn btn-primary">Assign Course</button>
                                     </form>
                                 </div>
@@ -1346,9 +1468,24 @@ $countStmt->close();
                                         <ul class="list-group list-group-flush">
                                             <?php foreach ($recentAssignments as $item): ?>
                                                 <li class="list-group-item px-0">
-                                                    <strong><?php echo htmlspecialchars($item['teacher_name']); ?></strong>
-                                                    → <?php echo htmlspecialchars($item['course_code']); ?>
+                                                        <strong>Combined Class Block</strong>
+                                                        <br>
+                                                        <small class="text-muted">
+                                                            Session <?php echo htmlspecialchars($item['session']); ?> | Semester <?php echo (int)$item['semester_no']; ?> | Section <?php echo htmlspecialchars($item['section']); ?>
+                                                        </small>
                                                     <br>
+                                                        <small class="text-muted">
+                                                            Courses: <?php echo htmlspecialchars($item['course_list'] ?: 'N/A'); ?>
+                                                        </small>
+                                                        <br>
+                                                        <small class="text-muted">
+                                                            Teacher(s): <?php echo htmlspecialchars($item['teacher_names'] ?: 'N/A'); ?>
+                                                        </small>
+                                                        <br>
+                                                        <small class="text-muted">
+                                                            Assignments: <?php echo (int)$item['assigned_count']; ?>
+                                                        </small>
+                                                        <br>
                                                     <small class="text-muted">
                                                         <?php echo date('M d, Y h:i A', strtotime($item['assigned_at'])); ?>
                                                     </small>

@@ -1,12 +1,10 @@
 <?php
 session_start();
 include '../config.php';
+require_once __DIR__ . '/student_guard.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../index.php");
-    exit();
-}
+$studentIdentity = requireStudentIdentity($conn);
+$studentUserId = (int)$studentIdentity['user_id'];
 
 $password_error = '';
 $password_success = '';
@@ -20,8 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
     $repeatNewPassword = $_POST['repeatNewPassword'];
     
     // Fetch current password from DB
-    $stmt = $conn->prepare("SELECT password FROM user WHERE user_id = ?");
-    $stmt->bind_param("i", $_SESSION['user_id']);
+    $stmt = $conn->prepare("SELECT password FROM user WHERE user_id = ? AND role = 'student'");
+    $stmt->bind_param("i", $studentUserId);
     $stmt->execute();
     $result = $stmt->get_result();
     $user = $result->fetch_assoc();
@@ -37,8 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
         $password_error = "Password must be at least 6 characters!";
     } else {
         $hashedPassword = hashPasswordArgon2id($newPassword);
-        $updateStmt = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ?");
-        $updateStmt->bind_param("si", $hashedPassword, $_SESSION['user_id']);
+        $updateStmt = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ? AND role = 'student'");
+        $updateStmt->bind_param("si", $hashedPassword, $studentUserId);
         if ($updateStmt->execute()) {
             $password_success = "Password updated successfully!";
         } else {
@@ -57,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_email'])) {
     } else {
         // Check if email already exists for another user
         $checkStmt = $conn->prepare("SELECT user_id FROM user WHERE email = ? AND user_id != ?");
-        $checkStmt->bind_param("si", $email, $_SESSION['user_id']);
+        $checkStmt->bind_param("si", $email, $studentUserId);
         $checkStmt->execute();
         $checkResult = $checkStmt->get_result();
         
@@ -65,8 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_email'])) {
             $email_error = "This email is already in use by another account!";
         } else {
             // Update email
-            $updateStmt = $conn->prepare("UPDATE user SET email = ? WHERE user_id = ?");
-            $updateStmt->bind_param("si", $email, $_SESSION['user_id']);
+            $updateStmt = $conn->prepare("UPDATE user SET email = ? WHERE user_id = ? AND role = 'student'");
+            $updateStmt->bind_param("si", $email, $studentUserId);
             if ($updateStmt->execute()) {
                 $email_success = "Email updated successfully!";
             } else {
@@ -87,13 +85,7 @@ $student = $result->fetch_assoc();
 $stmt->close();
 
 // Fetch current email
-$stmt = $conn->prepare("SELECT email FROM user WHERE user_id = ?");
-$stmt->bind_param("i", $_SESSION['user_id']);
-$stmt->execute();
-$result = $stmt->get_result();
-$userData = $result->fetch_assoc();
-$currentEmail = $userData['email'] ?? '';
-$stmt->close();
+$currentEmail = (string)($studentIdentity['email'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="en">

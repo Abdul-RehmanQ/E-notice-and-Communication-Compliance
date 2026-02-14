@@ -1,12 +1,10 @@
 <?php
 session_start();
 include '../config.php';
+require_once __DIR__ . '/student_guard.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../index.php");
-    exit();
-}
+$studentIdentity = requireStudentIdentity($conn);
+$studentUserId = (int)$studentIdentity['user_id'];
 
 $error = '';
 $success = '';
@@ -19,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_post'])) {
     $postId = (int)$_POST['post_id'];
     // Only allow deleting own posts
     $stmt = $conn->prepare("DELETE FROM posts WHERE post_id = ? AND user_id = ?");
-    $stmt->bind_param("ii", $postId, $_SESSION['user_id']);
+    $stmt->bind_param("ii", $postId, $studentUserId);
     if ($stmt->execute() && $stmt->affected_rows > 0) {
         $success = "Post deleted successfully!";
     } else {
@@ -66,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_post'])) {
         
         if (empty($error)) {
             $expiresAt = date('Y-m-d H:i:s', strtotime("+$expiresIn days"));
-            $userId = $_SESSION['user_id'];
+            $userId = $studentUserId;
             
             $stmt = $conn->prepare("INSERT INTO posts (user_id, content, image_data, image_type, image_size, scope, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $stmt->bind_param("isssiss", $userId, $content, $imageData, $imageType, $imageSize, $scope, $expiresAt);
@@ -118,7 +116,7 @@ $stmt->close();
 // Fetch user's own posts for delete dropdown
 $userPosts = [];
 $stmt = $conn->prepare("SELECT post_id, content, created_at FROM posts WHERE user_id = ? AND expires_at > NOW() ORDER BY created_at DESC");
-$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->bind_param("i", $studentUserId);
 $stmt->execute();
 $userPostsResult = $stmt->get_result();
 while ($row = $userPostsResult->fetch_assoc()) {

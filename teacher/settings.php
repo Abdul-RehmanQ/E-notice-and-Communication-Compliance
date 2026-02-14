@@ -1,3 +1,10 @@
+<?php
+session_start();
+include '../config.php';
+require_once __DIR__ . '/teacher_guard.php';
+
+$teacher = requireTeacherIdentity($conn);
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -52,9 +59,9 @@
         style="left: 250px; width: calc(100% - 250px);">
         <div class="container-fluid justify-content-center">
             <div class="d-flex text-white gap-3 flex-wrap justify-content-center">
-                <span><strong>Teacher:</strong> Jane Doe</span>
+                <span><strong>Teacher:</strong> <?php echo htmlspecialchars($teacher['name']); ?></span>
                 <span>|</span>
-                <span><strong>Department:</strong> Computer Science</span>
+                <span><strong>Department:</strong> <?php echo htmlspecialchars($teacher['department']); ?></span>
             </div>
         </div>
     </nav>

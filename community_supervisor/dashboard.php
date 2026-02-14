@@ -1,12 +1,10 @@
 <?php
 session_start();
 include '../config.php';
+require_once __DIR__ . '/supervisor_guard.php';
 
-// Check if user is logged in as supervisor
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'community_supervisor') {
-    header("Location: login.php");
-    exit();
-}
+$supervisor = requireSupervisorIdentity($conn);
+$supervisorId = (int)$supervisor['supervisor_id'];
 
 $success = '';
 $error = '';
@@ -23,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['approve_post'])) {
     if ($stmt->execute()) {
         // Log the review
         $logStmt = $conn->prepare("INSERT INTO post_reviews (post_id, supervisor_id, action) VALUES (?, ?, 'approved')");
-        $logStmt->bind_param("ii", $postId, $_SESSION['supervisor_id']);
+        $logStmt->bind_param("ii", $postId, $supervisorId);
         $logStmt->execute();
         $logStmt->close();
         
@@ -41,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['reject_post'])) {
     
     // Log the review first
     $logStmt = $conn->prepare("INSERT INTO post_reviews (post_id, supervisor_id, action, rejection_reason) VALUES (?, ?, 'rejected', ?)");
-    $logStmt->bind_param("iis", $postId, $_SESSION['supervisor_id'], $reason);
+    $logStmt->bind_param("iis", $postId, $supervisorId, $reason);
     $logStmt->execute();
     $logStmt->close();
     

@@ -2,45 +2,15 @@
 session_start();
 include '../config.php';
 include '../send_email.php';
+require_once __DIR__ . '/student_guard.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../index.php");
-    exit();
-}
-
-if (!isset($_SESSION['student_id'])) {
-    $resolveStudentStmt = $conn->prepare("SELECT student_id, name, Roll_no FROM student WHERE student_id = ? LIMIT 1");
-    $resolveStudentStmt->bind_param("i", $_SESSION['user_id']);
-    $resolveStudentStmt->execute();
-    $resolveStudentResult = $resolveStudentStmt->get_result();
-    $resolvedStudent = $resolveStudentResult ? $resolveStudentResult->fetch_assoc() : null;
-    $resolveStudentStmt->close();
-
-    if ($resolvedStudent) {
-        $_SESSION['student_id'] = (int)$resolvedStudent['student_id'];
-        $_SESSION['student_name'] = $resolvedStudent['name'];
-        $_SESSION['roll_number'] = $resolvedStudent['Roll_no'];
-    } else {
-        session_unset();
-        session_destroy();
-        header("Location: ../index.php");
-        exit();
-    }
-}
+$studentIdentity = requireStudentIdentity($conn);
+$studentUserId = (int)$studentIdentity['user_id'];
 
 $error = '';
 $success = '';
 
-$studentEmail = '';
-$studentEmailStmt = $conn->prepare("SELECT email FROM user WHERE user_id = ? LIMIT 1");
-$studentEmailStmt->bind_param("i", $_SESSION['user_id']);
-$studentEmailStmt->execute();
-$studentEmailResult = $studentEmailStmt->get_result();
-if ($studentEmailResult && $studentEmailRow = $studentEmailResult->fetch_assoc()) {
-    $studentEmail = $studentEmailRow['email'] ?? '';
-}
-$studentEmailStmt->close();
+$studentEmail = (string)($studentIdentity['email'] ?? '');
 
 // Handle email reply
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_reply'])) {
@@ -83,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_reply'])) {
         } else {
             $result = sendReplyEmail(
                 $conn,
-                $_SESSION['user_id'],
+                $studentUserId,
                 $recipientId,
                 $recipientEmail,
                 $studentEmail,
@@ -361,6 +331,11 @@ $stmt->close();
                         <div class="mb-3">
                             <label class="form-label">To:</label>
                             <div class="form-control bg-light" id="replyRecipientDisplay"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">From:</label>
+                            <div class="form-control bg-light"><?php echo htmlspecialchars($studentEmail ?: 'No email configured'); ?></div>
                         </div>
                         
                         <div class="mb-3">
