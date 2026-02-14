@@ -4,3 +4,6 @@ email_config.local.php
 # Environment files
 .env
 .env.*
+
+# Dependencies
+vendor/

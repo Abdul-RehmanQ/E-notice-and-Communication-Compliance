@@ -9,19 +9,64 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+if (!isset($_SESSION['student_id'])) {
+    $resolveStudentStmt = $conn->prepare("SELECT student_id, name, Roll_no FROM student WHERE student_id = ? LIMIT 1");
+    $resolveStudentStmt->bind_param("i", $_SESSION['user_id']);
+    $resolveStudentStmt->execute();
+    $resolveStudentResult = $resolveStudentStmt->get_result();
+    $resolvedStudent = $resolveStudentResult ? $resolveStudentResult->fetch_assoc() : null;
+    $resolveStudentStmt->close();
+
+    if ($resolvedStudent) {
+        $_SESSION['student_id'] = (int)$resolvedStudent['student_id'];
+        $_SESSION['student_name'] = $resolvedStudent['name'];
+        $_SESSION['roll_number'] = $resolvedStudent['Roll_no'];
+    } else {
+        session_unset();
+        session_destroy();
+        header("Location: ../index.php");
+        exit();
+    }
+}
+
 $error = '';
 $success = '';
 
+$studentEmail = '';
+$studentEmailStmt = $conn->prepare("SELECT email FROM user WHERE user_id = ? LIMIT 1");
+$studentEmailStmt->bind_param("i", $_SESSION['user_id']);
+$studentEmailStmt->execute();
+$studentEmailResult = $studentEmailStmt->get_result();
+if ($studentEmailResult && $studentEmailRow = $studentEmailResult->fetch_assoc()) {
+    $studentEmail = $studentEmailRow['email'] ?? '';
+}
+$studentEmailStmt->close();
+
 // Handle email reply
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_reply'])) {
-    $recipientEmail = trim($_POST['recipient_email']);
     $recipientId = (int)$_POST['recipient_id'];
     $notificationId = (int)$_POST['notification_id'];
     $subject = trim($_POST['reply_subject']);
     $message = trim($_POST['reply_message']);
+
+    $recipientEmail = '';
+    $recipientLookupStmt = $conn->prepare("SELECT u.email
+                                           FROM teacher t
+                                           INNER JOIN user u ON u.user_id = t.teacher_id
+                                           WHERE t.teacher_id = ? AND u.role = 'teacher'
+                                           LIMIT 1");
+    $recipientLookupStmt->bind_param("i", $recipientId);
+    $recipientLookupStmt->execute();
+    $recipientLookupResult = $recipientLookupStmt->get_result();
+    if ($recipientLookupResult && $recipientLookupRow = $recipientLookupResult->fetch_assoc()) {
+        $recipientEmail = trim((string)$recipientLookupRow['email']);
+    }
+    $recipientLookupStmt->close();
     
     if (empty($recipientEmail) || empty($subject) || empty($message)) {
         $error = "Please fill in all fields.";
+    } elseif (!filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+        $error = "Teacher email is invalid. Please contact admin.";
     } else {
         // Format email body with HTML
         $emailBody = "
@@ -33,12 +78,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['send_reply'])) {
             </div>
         ";
         
-        $result = sendReplyEmail($conn, $_SESSION['user_id'], $recipientId, $recipientEmail, $subject, $emailBody, null);
-        
-        if ($result['success']) {
-            $success = "Email sent successfully to " . htmlspecialchars($recipientEmail) . "!";
+        if (empty($studentEmail)) {
+            $error = "Your student email was not found. Please contact admin.";
         } else {
-            $error = "Failed to send email: " . $result['error'];
+            $result = sendReplyEmail(
+                $conn,
+                $_SESSION['user_id'],
+                $recipientId,
+                $recipientEmail,
+                $studentEmail,
+                ($_SESSION['student_name'] ?? 'Student'),
+                $subject,
+                $emailBody,
+                null
+            );
+        
+            if ($result['success']) {
+                $success = "Email sent successfully to " . htmlspecialchars($recipientEmail) . "!";
+            } else {
+                $error = "Failed to send email: " . $result['error'];
+            }
         }
     }
 }
@@ -50,6 +109,13 @@ $stmt->execute();
 $result = $stmt->get_result();
 $student = $result->fetch_assoc();
 $stmt->close();
+
+if (!$student) {
+    session_unset();
+    session_destroy();
+    header("Location: ../index.php");
+    exit();
+}
 
 // Fetch notifications for this student (from teachers)
 $notifications = [];
@@ -229,29 +295,50 @@ $stmt->close();
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../logout.php';
-        });
+        document.addEventListener('DOMContentLoaded', function () {
+            const logoutBtn = document.getElementById('logout-btn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', () => {
+                    window.location.href = '../logout.php';
+                });
+            }
 
-        // Reply Modal - populate data when opened
-        document.getElementById('replyModal').addEventListener('show.bs.modal', function (event) {
-            const button = event.relatedTarget;
-            const recipientEmail = button.getAttribute('data-recipient-email');
-            const recipientId = button.getAttribute('data-recipient-id');
-            const recipientName = button.getAttribute('data-recipient-name');
-            const notificationId = button.getAttribute('data-notification-id');
-            const notificationPreview = button.getAttribute('data-notification-preview');
+            const replyModal = document.getElementById('replyModal');
+            if (!replyModal) {
+                return;
+            }
 
-            document.getElementById('replyRecipientEmail').value = recipientEmail;
-            document.getElementById('replyRecipientId').value = recipientId;
-            document.getElementById('replyNotificationId').value = notificationId;
-            document.getElementById('replyRecipientDisplay').textContent = recipientName + ' (' + recipientEmail + ')';
-            document.getElementById('replySubject').value = 'Re: ' + notificationPreview;
-        });
+            replyModal.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                if (!button) {
+                    return;
+                }
 
-        // Reset reply modal when closed
-        document.getElementById('replyModal').addEventListener('hidden.bs.modal', function () {
-            document.getElementById('replyForm').reset();
+                const recipientEmail = button.getAttribute('data-recipient-email') || '';
+                const recipientId = button.getAttribute('data-recipient-id') || '';
+                const recipientName = button.getAttribute('data-recipient-name') || 'Teacher';
+                const notificationId = button.getAttribute('data-notification-id') || '';
+                const notificationPreview = button.getAttribute('data-notification-preview') || 'Notification';
+
+                const replyRecipientEmail = document.getElementById('replyRecipientEmail');
+                const replyRecipientId = document.getElementById('replyRecipientId');
+                const replyNotificationId = document.getElementById('replyNotificationId');
+                const replyRecipientDisplay = document.getElementById('replyRecipientDisplay');
+                const replySubject = document.getElementById('replySubject');
+
+                if (replyRecipientEmail) replyRecipientEmail.value = recipientEmail;
+                if (replyRecipientId) replyRecipientId.value = recipientId;
+                if (replyNotificationId) replyNotificationId.value = notificationId;
+                if (replyRecipientDisplay) replyRecipientDisplay.textContent = recipientName + ' (' + recipientEmail + ')';
+                if (replySubject) replySubject.value = 'Re: ' + notificationPreview;
+            });
+
+            replyModal.addEventListener('hidden.bs.modal', function () {
+                const replyForm = document.getElementById('replyForm');
+                if (replyForm) {
+                    replyForm.reset();
+                }
+            });
         });
     </script>
 

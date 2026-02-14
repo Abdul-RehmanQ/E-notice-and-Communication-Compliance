@@ -19,8 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     if ($result->num_rows == 1) {
         $student = $result->fetch_assoc();
-        // Verify password (supports both plain text and hashed passwords)
-        $passwordValid = ($password === $student['password']) || password_verify($password, $student['password']);
+        $passwordValid = verifyPasswordArgon2id($password, $student['password']);
         
         if ($passwordValid) {
             // Update login_time

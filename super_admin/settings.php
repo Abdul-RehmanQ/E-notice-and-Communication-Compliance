@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
     if (!$user) {
         $password_error = 'User record not found.';
     } else {
-        $passwordValid = ($currentPassword === $user['password']) || password_verify($currentPassword, $user['password']);
+        $passwordValid = verifyPasswordArgon2id($currentPassword, $user['password']);
 
         if (!$passwordValid) {
             $password_error = 'Current password is incorrect!';
@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
         } elseif (strlen($newPassword) < 6) {
             $password_error = 'Password must be at least 6 characters!';
         } else {
-            $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+            $hashedPassword = hashPasswordArgon2id($newPassword);
             $updateStmt = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ?");
             $updateStmt->bind_param("si", $hashedPassword, $_SESSION['user_id']);
             if ($updateStmt->execute()) {

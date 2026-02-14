@@ -15,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     if ($result && $result->num_rows === 1) {
         $admin = $result->fetch_assoc();
-        $passwordValid = ($password === $admin['password']) || password_verify($password, $admin['password']);
+        $passwordValid = verifyPasswordArgon2id($password, $admin['password']);
 
         if ($passwordValid) {
             $updateStmt = $conn->prepare("UPDATE user SET login_time = NOW() WHERE user_id = ?");

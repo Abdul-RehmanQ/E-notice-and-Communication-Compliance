@@ -5,6 +5,30 @@ require 'email_config.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+function isBlockedEmailDomain($email) {
+    $domain = strtolower((string)substr(strrchr($email, "@"), 1));
+    if ($domain === '') {
+        return true;
+    }
+
+    $blocked = array_filter(array_map('trim', explode(',', (string)EMAIL_BLOCKED_DOMAINS)));
+    $blocked = array_map('strtolower', $blocked);
+
+    return in_array($domain, $blocked, true);
+}
+
+function validateEmailForSending($email) {
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return false;
+    }
+
+    if (EMAIL_VALIDATE_STRICT && isBlockedEmailDomain($email)) {
+        return false;
+    }
+
+    return true;
+}
+
 /**
  * Send email using PHPMailer with Gmail SMTP
  * 
@@ -12,9 +36,13 @@ use PHPMailer\PHPMailer\Exception;
  * @param string $subject Email subject
  * @param string $body Email body content
  * @param bool $isHTML Whether body is HTML (default: true)
+ * @param string|null $fromEmail Optional sender email
+ * @param string|null $fromName Optional sender name
+ * @param string|null $replyToEmail Optional reply-to email
+ * @param string|null $replyToName Optional reply-to name
  * @return array ['success' => bool, 'error' => string|null]
  */
-function sendEmail($to, $subject, $body, $isHTML = true) {
+function sendEmail($to, $subject, $body, $isHTML = true, $fromEmail = null, $fromName = null, $replyToEmail = null, $replyToName = null) {
     $mail = new PHPMailer(true);
     
     try {
@@ -22,17 +50,45 @@ function sendEmail($to, $subject, $body, $isHTML = true) {
             return ['success' => false, 'error' => 'SMTP credentials are not configured. Set SMTP_USERNAME and SMTP_PASSWORD in email_config.local.php or environment variables.'];
         }
 
+        if (!validateEmailForSending($to)) {
+            return ['success' => false, 'error' => 'Recipient email is invalid or blocked by policy.'];
+        }
+
+        if (!empty($replyToEmail) && !validateEmailForSending($replyToEmail)) {
+            return ['success' => false, 'error' => 'Reply-to email is invalid or blocked by policy.'];
+        }
+
         // Server settings
         $mail->isSMTP();
         $mail->Host = SMTP_HOST;
-        $mail->SMTPAuth = true;
+        $mail->SMTPAuth = SMTP_AUTH;
         $mail->Username = SMTP_USERNAME;
         $mail->Password = SMTP_PASSWORD;
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Timeout = SMTP_TIMEOUT;
+
+        $secureMode = strtolower((string)SMTP_SECURE);
+        if ($secureMode === 'ssl') {
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+        } elseif ($secureMode === 'none') {
+            $mail->SMTPSecure = '';
+            $mail->SMTPAutoTLS = false;
+        } else {
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        }
         $mail->Port = SMTP_PORT;
 
         // Recipients
-        $mail->setFrom(SMTP_USERNAME, SMTP_FROM_NAME);
+        $mail->setFrom(SMTP_FROM_EMAIL, SMTP_FROM_NAME);
+        $mail->Sender = SMTP_BOUNCE_EMAIL;
+
+        if (!empty($fromEmail) && validateEmailForSending($fromEmail)) {
+            $mail->addCustomHeader('X-Original-Sender', $fromEmail);
+        }
+
+        if (!empty($replyToEmail)) {
+            $mail->addReplyTo($replyToEmail, $replyToName ?: $replyToEmail);
+        }
+
         $mail->addAddress($to);
 
         // Content
@@ -60,14 +116,25 @@ function sendEmail($to, $subject, $body, $isHTML = true) {
  * @param int $senderId Sender's user ID
  * @param int $recipientId Recipient's user ID
  * @param string $recipientEmail Recipient's email
+ * @param string $senderEmail Sender's email
+ * @param string $senderName Sender's display name
  * @param string $subject Email subject
  * @param string $body Email body
  * @param int|null $postId Related post ID (optional)
  * @return array ['success' => bool, 'error' => string|null]
  */
-function sendReplyEmail($conn, $senderId, $recipientId, $recipientEmail, $subject, $body, $postId = null) {
+function sendReplyEmail($conn, $senderId, $recipientId, $recipientEmail, $senderEmail, $senderName, $subject, $body, $postId = null) {
     // Send the email
-    $result = sendEmail($recipientEmail, $subject, $body);
+    $result = sendEmail(
+        $recipientEmail,
+        $subject,
+        $body,
+        true,
+        $senderEmail,
+        $senderName,
+        $senderEmail,
+        $senderName
+    );
     
     // Log to messages table
     $status = $result['success'] ? 'sent' : 'failed';

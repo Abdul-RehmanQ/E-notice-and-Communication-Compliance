@@ -27,6 +27,161 @@ if (!$teacher) {
 $_SESSION['teacher_id'] = $teacher['teacher_id'];
 $_SESSION['teacher_name'] = $teacher['name'];
 $_SESSION['teacher_department'] = $teacher['department'];
+
+$success = '';
+$error = '';
+
+$assignedCourses = [];
+$assignedCourseStmt = $conn->prepare("SELECT DISTINCT c.course_id, c.course_code, c.course_title, c.department, c.semester_no
+                                      FROM teacher_course_assignments tca
+                                      INNER JOIN courses c ON c.course_id = tca.course_id
+                                      WHERE tca.teacher_id = ?
+                                      ORDER BY c.course_code ASC");
+$assignedCourseStmt->bind_param("i", $teacher['teacher_id']);
+$assignedCourseStmt->execute();
+$assignedCourseResult = $assignedCourseStmt->get_result();
+if ($assignedCourseResult) {
+    while ($row = $assignedCourseResult->fetch_assoc()) {
+        $assignedCourses[] = $row;
+    }
+}
+$assignedCourseStmt->close();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification'])) {
+    $selectedCourseId = (int)($_POST['course_id'] ?? 0);
+    $message = trim($_POST['message'] ?? '');
+
+    if ($selectedCourseId <= 0) {
+        $error = 'Please select a course.';
+    } elseif ($message === '') {
+        $error = 'Please enter a notification message.';
+    } elseif (mb_strlen($message) > 2000) {
+        $error = 'Message is too long. Maximum 2000 characters allowed.';
+    } else {
+        $selectedCourse = null;
+        foreach ($assignedCourses as $course) {
+            if ((int)$course['course_id'] === $selectedCourseId) {
+                $selectedCourse = $course;
+                break;
+            }
+        }
+
+        $assignmentCheckStmt = $conn->prepare("SELECT assignment_id
+                                               FROM teacher_course_assignments
+                                               WHERE teacher_id = ? AND course_id = ?
+                                               LIMIT 1");
+        $assignmentCheckStmt->bind_param("ii", $teacher['teacher_id'], $selectedCourseId);
+        $assignmentCheckStmt->execute();
+        $assignmentCheckResult = $assignmentCheckStmt->get_result();
+        $isAssignedToCourse = $assignmentCheckResult && $assignmentCheckResult->num_rows > 0;
+        $assignmentCheckStmt->close();
+
+        if (!$isAssignedToCourse) {
+            $error = 'You can only send notifications for courses assigned to you.';
+        } else {
+            $recipientIds = [];
+            $recipientSessions = [];
+            $recipientStmt = $conn->prepare("SELECT DISTINCT sce.student_id
+                                             , s.session
+                                             FROM student_course_enrollments sce
+                                             INNER JOIN student s ON s.student_id = sce.student_id
+                                             WHERE sce.course_id = ? AND sce.status = 'active'");
+            $recipientStmt->bind_param("i", $selectedCourseId);
+            $recipientStmt->execute();
+            $recipientResult = $recipientStmt->get_result();
+            if ($recipientResult) {
+                while ($recipient = $recipientResult->fetch_assoc()) {
+                    $recipientIds[] = (int)$recipient['student_id'];
+                    if (!empty($recipient['session'])) {
+                        $recipientSessions[$recipient['session']] = true;
+                    }
+                }
+            }
+            $recipientStmt->close();
+
+            if (empty($recipientIds)) {
+                $error = 'No active enrolled students found for the selected course.';
+            } else {
+                $insertStmt = $conn->prepare("INSERT INTO notifications (recipient_id, sender_id, message) VALUES (?, ?, ?)");
+                $insertedCount = 0;
+
+                foreach ($recipientIds as $recipientId) {
+                    $insertStmt->bind_param("iis", $recipientId, $teacher['teacher_id'], $message);
+                    if ($insertStmt->execute()) {
+                        $insertedCount++;
+                    }
+                }
+
+                $insertStmt->close();
+
+                if ($insertedCount > 0) {
+                    $sessionLabel = 'N/A';
+                    if (!empty($recipientSessions)) {
+                        $sessionLabel = implode(', ', array_keys($recipientSessions));
+                    }
+
+                    $courseCode = $selectedCourse['course_code'] ?? 'Selected Course';
+                    $semesterNo = $selectedCourse['semester_no'] ?? 'N/A';
+                    $success = "Notification sent for {$courseCode} (Semester {$semesterNo}, Session {$sessionLabel}) to {$insertedCount} student(s).";
+                } else {
+                    $error = 'Failed to send notification. Please try again.';
+                }
+            }
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification'])) {
+    $notificationIdToDelete = (int)($_POST['notification_id'] ?? 0);
+
+    if ($notificationIdToDelete <= 0) {
+        $error = 'Please select a notification to delete.';
+    } else {
+        $findStmt = $conn->prepare("SELECT message, created_at
+                                    FROM notifications
+                                    WHERE notification_id = ? AND sender_id = ?
+                                    LIMIT 1");
+        $findStmt->bind_param("ii", $notificationIdToDelete, $teacher['teacher_id']);
+        $findStmt->execute();
+        $findResult = $findStmt->get_result();
+        $batchToDelete = $findResult ? $findResult->fetch_assoc() : null;
+        $findStmt->close();
+
+        if (!$batchToDelete) {
+            $error = 'Unable to delete the selected notification.';
+        } else {
+            $deleteStmt = $conn->prepare("DELETE FROM notifications
+                                          WHERE sender_id = ? AND message = ? AND created_at = ?");
+            $deleteStmt->bind_param("iss", $teacher['teacher_id'], $batchToDelete['message'], $batchToDelete['created_at']);
+            $deleteStmt->execute();
+
+            if ($deleteStmt->affected_rows > 0) {
+                $success = 'Notification deleted successfully.';
+            } else {
+                $error = 'Unable to delete the selected notification.';
+            }
+
+            $deleteStmt->close();
+        }
+    }
+}
+
+$sentNotifications = [];
+$sentStmt = $conn->prepare("SELECT MIN(n.notification_id) AS notification_id, n.message, n.created_at, COUNT(*) AS recipient_count
+                            FROM notifications n
+                            WHERE n.sender_id = ?
+                            GROUP BY n.message, n.created_at
+                            ORDER BY n.created_at DESC
+                            LIMIT 100");
+$sentStmt->bind_param("i", $teacher['teacher_id']);
+$sentStmt->execute();
+$sentResult = $sentStmt->get_result();
+if ($sentResult) {
+    while ($row = $sentResult->fetch_assoc()) {
+        $sentNotifications[] = $row;
+    }
+}
+$sentStmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -144,92 +299,51 @@ $_SESSION['teacher_department'] = $teacher['department'];
                         </div>
                     </div>
 
+                    <?php if ($error): ?>
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <?php echo htmlspecialchars($error); ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($success): ?>
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <?php echo htmlspecialchars($success); ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+
                     <!-- Add Notification Form -->
                     <div class="card mb-4 d-none" id="add-notification-card">
                         <div class="card-header">
                             <h5 class="mb-0">New Notification</h5>
                         </div>
                         <div class="card-body">
-                            <form id="add-notification-form">
-                                <div class="row g-3 mb-3">
-                                    <div class="col-md-3">
-                                        <label for="session" class="form-label">Session</label>
-                                        <input type="text" class="form-control" id="session" placeholder="2023-2027"
-                                            required>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label for="department" class="form-label">Department</label>
-                                        <select class="form-select" id="department" required>
-                                            <option value="" selected disabled>Select department</option>
-                                            <option value="CS">CS</option>
-                                            <option value="IT">IT</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label for="semester" class="form-label">Semester</label>
-                                        <select class="form-select" id="semester" required>
-                                            <option value="" selected disabled>Select semester</option>
-                                            <option value="1">1</option>
-                                            <option value="2">2</option>
-                                            <option value="3">3</option>
-                                            <option value="4">4</option>
-                                            <option value="5">5</option>
-                                            <option value="6">6</option>
-                                            <option value="7">7</option>
-                                            <option value="8">8</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label for="section" class="form-label">Section</label>
-                                        <select class="form-select" id="section" required>
-                                            <option value="" selected disabled>Select section</option>
-                                            <option value="A">A</option>
-                                            <option value="B">B</option>
-                                            <option value="Both">Both Sections</option>
-                                        </select>
-                                    </div>
+                            <form id="add-notification-form" method="POST" action="">
+                                <div class="mb-3">
+                                    <label for="course_id" class="form-label">Assigned Course</label>
+                                    <select class="form-select" id="course_id" name="course_id" required>
+                                        <option value="" selected disabled>Select assigned course</option>
+                                        <?php foreach ($assignedCourses as $course): ?>
+                                            <option value="<?php echo (int)$course['course_id']; ?>">
+                                                <?php echo htmlspecialchars($course['course_code'] . ' - ' . $course['course_title']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <?php if (empty($assignedCourses)): ?>
+                                        <div class="form-text text-danger">No assigned courses found. Ask admin to assign a course first.</div>
+                                    <?php endif; ?>
                                 </div>
 
                                 <div class="mb-3">
-                                    <label class="form-label fw-bold">Content Type</label>
-                                    <div class="d-flex flex-wrap gap-3">
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="includeText" checked>
-                                            <label class="form-check-label" for="includeText">
-                                                <i class="fas fa-pen me-1"></i>Write something
-                                            </label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" id="includeImage">
-                                            <label class="form-check-label" for="includeImage">
-                                                <i class="fas fa-image me-1"></i>Upload image
-                                            </label>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="mb-3" id="textSection">
                                     <label for="message" class="form-label">Message</label>
-                                    <textarea class="form-control" id="message" rows="3"
-                                        placeholder="Write your notification..."></textarea>
-                                </div>
-
-                                <div class="mb-3 d-none" id="imageSection">
-                                    <label for="image" class="form-label">Image</label>
-                                    <input class="form-control" type="file" id="image" accept="image/*">
-                                    <div class="form-text">Accepted formats: JPG, PNG, GIF (Max 5MB)</div>
-                                    <div id="imagePreview" class="mt-3 d-none">
-                                        <img src="" alt="Preview" class="img-fluid rounded" style="max-height: 200px;">
-                                        <button type="button" class="btn btn-sm btn-outline-danger mt-2"
-                                            id="removeImage">
-                                            <i class="fas fa-times"></i> Remove
-                                        </button>
-                                    </div>
+                                    <textarea class="form-control" id="message" name="message" rows="4"
+                                        placeholder="Write your notification..." required></textarea>
                                 </div>
 
                                 <div class="d-flex justify-content-end gap-2">
                                     <button type="button" class="btn btn-secondary" id="cancel-add">Cancel</button>
-                                    <button type="submit" class="btn btn-success">
+                                    <button type="submit" name="send_notification" class="btn btn-success" <?php echo empty($assignedCourses) ? 'disabled' : ''; ?>>
                                         <i class="fas fa-paper-plane me-1"></i>Send Notification
                                     </button>
                                 </div>
@@ -243,13 +357,31 @@ $_SESSION['teacher_department'] = $teacher['department'];
                             <h5 class="mb-0">Notification History</h5>
                         </div>
                         <div class="card-body" id="notification-list">
-                            <div class="alert alert-info" id="no-notifications-text">
-                                No notifications yet. Click "Add New Notification" to create one.
-                            </div>
+                            <?php if (empty($sentNotifications)): ?>
+                                <div class="alert alert-info" id="no-notifications-text">
+                                    No notifications yet. Click "Add New Notification" to create one.
+                                </div>
+                            <?php else: ?>
+                                <?php foreach ($sentNotifications as $notification): ?>
+                                    <div class="card mb-3 shadow-sm" data-notification-id="<?php echo (int)$notification['notification_id']; ?>">
+                                        <div class="card-body">
+                                            <p class="mb-2"><?php echo nl2br(htmlspecialchars($notification['message'])); ?></p>
+                                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-users me-1"></i>Sent to: <?php echo (int)$notification['recipient_count']; ?> student(s)
+                                                </small>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-clock me-1"></i><?php echo date('M d, Y h:i A', strtotime($notification['created_at'])); ?>
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                         </div>
                     </div>
 
-                    <!-- Delete Notification Modal (prototype only) -->
+                    <!-- Delete Notification Modal -->
                     <div class="modal fade" id="deleteNotificationModal" tabindex="-1"
                         aria-labelledby="deleteNotificationModalLabel" aria-hidden="true">
                         <div class="modal-dialog">
@@ -262,20 +394,30 @@ $_SESSION['teacher_department'] = $teacher['department'];
                                         aria-label="Close"></button>
                                 </div>
                                 <div class="modal-body">
-                                    <p class="mb-3">Prototype only: in a real system this would request deletion from
-                                        the server.</p>
-                                    <div class="mb-3">
-                                        <label for="selectNotificationToDelete" class="form-label fw-bold">Select a
-                                            notification to delete:</label>
-                                        <select class="form-select" id="selectNotificationToDelete">
-                                        </select>
-                                    </div>
+                                    <form id="delete-notification-form" method="POST" action="">
+                                        <div class="mb-3">
+                                            <label for="selectNotificationToDelete" class="form-label fw-bold">Select a
+                                                notification to delete:</label>
+                                            <select class="form-select" id="selectNotificationToDelete" name="notification_id" required>
+                                                <option value="" selected disabled>-- Choose a notification --</option>
+                                                <?php foreach ($sentNotifications as $notification): ?>
+                                                    <option value="<?php echo (int)$notification['notification_id']; ?>">
+                                                        <?php
+                                                        $preview = mb_substr($notification['message'], 0, 60);
+                                                        $preview = mb_strlen($notification['message']) > 60 ? $preview . '...' : $preview;
+                                                        echo htmlspecialchars($preview . ' | ' . date('M d, Y h:i A', strtotime($notification['created_at'])));
+                                                        ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
+                                    </form>
                                 </div>
                                 <div class="modal-footer">
                                     <button type="button" class="btn btn-secondary"
                                         data-bs-dismiss="modal">Cancel</button>
-                                    <button type="button" class="btn btn-danger" id="confirmDeleteNotification"
-                                        disabled>
+                                    <button type="submit" form="delete-notification-form" name="delete_notification" class="btn btn-danger" id="confirmDeleteNotification"
+                                        <?php echo empty($sentNotifications) ? 'disabled' : ''; ?>>
                                         <i class="fas fa-trash me-1"></i>Delete Selected
                                     </button>
                                 </div>
@@ -292,22 +434,9 @@ $_SESSION['teacher_department'] = $teacher['department'];
         const addCard = document.getElementById('add-notification-card');
         const showAddFormBtn = document.getElementById('show-add-form');
         const cancelAddBtn = document.getElementById('cancel-add');
-        const addForm = document.getElementById('add-notification-form');
-        const includeText = document.getElementById('includeText');
-        const includeImage = document.getElementById('includeImage');
-        const textSection = document.getElementById('textSection');
-        const imageSection = document.getElementById('imageSection');
-        const imageInput = document.getElementById('image');
-        const imagePreview = document.getElementById('imagePreview');
-        const previewImg = imagePreview ? imagePreview.querySelector('img') : null;
-        const removeImageBtn = document.getElementById('removeImage');
-        const notificationList = document.getElementById('notification-list');
-        const noNotificationsText = document.getElementById('no-notifications-text');
         const showDeleteModalBtn = document.getElementById('show-delete-modal');
         const selectNotificationToDelete = document.getElementById('selectNotificationToDelete');
         const confirmDeleteNotificationBtn = document.getElementById('confirmDeleteNotification');
-
-        let notificationIdCounter = 1;
 
         // Show/hide add notification form
         showAddFormBtn.addEventListener('click', () => {
@@ -316,210 +445,25 @@ $_SESSION['teacher_department'] = $teacher['department'];
         });
 
         cancelAddBtn.addEventListener('click', () => {
-            resetForm();
+            document.getElementById('add-notification-form').reset();
             addCard.classList.add('d-none');
         });
 
-        // Toggle sections
-        includeText.addEventListener('change', () => {
-            textSection.classList.toggle('d-none', !includeText.checked);
-        });
-
-        includeImage.addEventListener('change', () => {
-            const show = includeImage.checked;
-            imageSection.classList.toggle('d-none', !show);
-            if (!show) {
-                imageInput.value = '';
-                imagePreview.classList.add('d-none');
-            }
-        });
-
-        // Image preview
-        imageInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) {
-                imagePreview.classList.add('d-none');
-                return;
-            }
-
-            if (!file.type.startsWith('image/')) {
-                alert('Please select an image file.');
-                imageInput.value = '';
-                return;
-            }
-
-            if (file.size > 5 * 1024 * 1024) {
-                alert('Image size must be less than 5MB.');
-                imageInput.value = '';
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = function (ev) {
-                previewImg.src = ev.target.result;
-                imagePreview.classList.remove('d-none');
-            };
-            reader.readAsDataURL(file);
-        });
-
-        removeImageBtn.addEventListener('click', () => {
-            imageInput.value = '';
-            imagePreview.classList.add('d-none');
-        });
-
-        // Handle form submit
-        addForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-
-            const session = document.getElementById('session').value.trim();
-            const department = document.getElementById('department').value;
-            const semester = document.getElementById('semester').value;
-            const section = document.getElementById('section').value;
-            const message = document.getElementById('message').value.trim();
-            const imageFile = imageInput.files[0] || null;
-
-            // Basic validation
-            if (!session || !department || !semester || !section) {
-                alert('Please fill in session, department, semester and section.');
-                return;
-            }
-
-            if (!includeText.checked && !includeImage.checked) {
-                alert('Please choose at least one content type: text or image.');
-                return;
-            }
-
-            if (includeText.checked && !message) {
-                alert('Please write a message for the notification.');
-                return;
-            }
-
-            if (includeImage.checked && !imageFile) {
-                alert('Please select an image to upload.');
-                return;
-            }
-
-            const payload = {
-                session,
-                department,
-                semester,
-                section,
-                text: includeText.checked ? message : null,
-                imageName: includeImage.checked && imageFile ? imageFile.name : null
-            };
-
-            console.log('New notification:', payload);
-
-            // Add to notification history
-            if (noNotificationsText) {
-                noNotificationsText.remove();
-            }
-
-            const card = document.createElement('div');
-            card.className = 'card mb-3 shadow-sm';
-
-            const notificationId = 'n' + notificationIdCounter++;
-            card.dataset.notificationId = notificationId;
-
-            const body = document.createElement('div');
-            body.className = 'card-body';
-
-            const target = document.createElement('p');
-            target.className = 'mb-1 text-muted';
-            target.textContent = `To: Session ${session}, ${department}, Semester ${semester}, Section ${section}`;
-
-            if (payload.text) {
-                const textP = document.createElement('p');
-                textP.textContent = payload.text;
-                body.appendChild(textP);
-            }
-
-            if (payload.imageName) {
-                const imgInfo = document.createElement('p');
-                imgInfo.className = 'mb-0 small text-muted';
-                imgInfo.textContent = `Image: ${payload.imageName}`;
-                body.appendChild(imgInfo);
-            }
-
-            body.appendChild(target);
-            card.appendChild(body);
-            notificationList.prepend(card);
-
-            alert('Notification created (front-end only).');
-
-            resetForm();
-            addCard.classList.add('d-none');
-        });
-
-        function resetForm() {
-            addForm.reset();
-            includeText.checked = true;
-            includeImage.checked = false;
-            textSection.classList.remove('d-none');
-            imageSection.classList.add('d-none');
-            imageInput.value = '';
-            imagePreview.classList.add('d-none');
-        }
-
-        // Open delete notification modal with list of notifications
         showDeleteModalBtn.addEventListener('click', () => {
-            const cards = notificationList.querySelectorAll('.card');
-            if (!cards.length) {
+            if (!selectNotificationToDelete || selectNotificationToDelete.options.length <= 1) {
                 alert('There are no notifications to delete.');
                 return;
             }
-
-            selectNotificationToDelete.innerHTML = '';
-
-            const placeholder = document.createElement('option');
-            placeholder.value = '';
-            placeholder.disabled = true;
-            placeholder.selected = true;
-            placeholder.textContent = '-- Choose a notification --';
-            selectNotificationToDelete.appendChild(placeholder);
-
-            cards.forEach((card, index) => {
-                const option = document.createElement('option');
-                option.value = card.dataset.notificationId;
-
-                const textP = card.querySelector('p:not(.text-muted)');
-                const text = textP ? textP.textContent.trim() : `Notification ${index + 1}`;
-                option.textContent = text.length > 60 ? text.slice(0, 60) + '...' : text;
-
-                selectNotificationToDelete.appendChild(option);
-            });
-
-            confirmDeleteNotificationBtn.disabled = true;
 
             const modal = new bootstrap.Modal(document.getElementById('deleteNotificationModal'));
             modal.show();
         });
 
-        selectNotificationToDelete.addEventListener('change', () => {
-            confirmDeleteNotificationBtn.disabled = !selectNotificationToDelete.value;
-        });
-
-        confirmDeleteNotificationBtn.addEventListener('click', () => {
-            const selectedId = selectNotificationToDelete.value;
-            if (!selectedId) return;
-
-            const card = notificationList.querySelector(`.card[data-notification-id="${selectedId}"]`);
-            if (card) {
-                card.remove();
-            }
-
-            if (!notificationList.querySelector('.card')) {
-                const info = document.createElement('div');
-                info.className = 'alert alert-info';
-                info.id = 'no-notifications-text';
-                info.textContent = 'No notifications yet. Click "Add New Notification" to create one.';
-                notificationList.appendChild(info);
-            }
-
-            const modalElement = document.getElementById('deleteNotificationModal');
-            const modal = bootstrap.Modal.getInstance(modalElement) || new bootstrap.Modal(modalElement);
-            modal.hide();
-        });
+        if (selectNotificationToDelete && confirmDeleteNotificationBtn) {
+            selectNotificationToDelete.addEventListener('change', () => {
+                confirmDeleteNotificationBtn.disabled = !selectNotificationToDelete.value;
+            });
+        }
 
         // Logout back to main index
         document.getElementById('logout-btn').addEventListener('click', () => {

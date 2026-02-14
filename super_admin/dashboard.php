@@ -13,6 +13,27 @@ $error = '';
 $importErrors = [];
 $adminId = (int)$_SESSION['user_id'];
 
+function finalizeImportRequest(string $success, string $error, array $importErrors): void
+{
+    $_SESSION['import_flash'] = [
+        'success' => $success,
+        'error' => $error,
+        'import_errors' => $importErrors,
+    ];
+
+    header('Location: dashboard.php');
+    exit();
+}
+
+if (isset($_SESSION['import_flash']) && is_array($_SESSION['import_flash'])) {
+    $flash = $_SESSION['import_flash'];
+    unset($_SESSION['import_flash']);
+
+    $success = (string)($flash['success'] ?? '');
+    $error = (string)($flash['error'] ?? '');
+    $importErrors = is_array($flash['import_errors'] ?? null) ? $flash['import_errors'] : [];
+}
+
 $adminDepartment = '';
 $adminProfileStmt = $conn->prepare("SELECT department FROM super_admin WHERE super_admin_id = ?");
 $adminProfileStmt->bind_param("i", $adminId);
@@ -188,7 +209,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_students'])) {
                         $seenEmails[$email] = true;
                         $seenRollNumbers[$rollNo] = true;
 
-                        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+                        $hashedPassword = hashPasswordArgon2id($password);
 
                         $selectUserStmt->bind_param("s", $email);
                         $selectUserStmt->execute();
@@ -271,6 +292,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_students'])) {
             }
         }
     }
+
+    finalizeImportRequest($success, $error, $importErrors);
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_teachers'])) {
@@ -395,7 +418,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_teachers'])) {
                         }
 
                         $seenEmails[$email] = true;
-                        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+                        $hashedPassword = hashPasswordArgon2id($password);
 
                         $selectUserStmt->bind_param("s", $email);
                         $selectUserStmt->execute();
@@ -463,6 +486,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_teachers'])) {
             }
         }
     }
+
+    finalizeImportRequest($success, $error, $importErrors);
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_courses'])) {
@@ -628,6 +653,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_courses'])) {
             }
         }
     }
+
+    finalizeImportRequest($success, $error, $importErrors);
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['assign_course'])) {
@@ -675,6 +702,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['assign_course'])) {
         }
         }
     }
+
+    finalizeImportRequest($success, $error, $importErrors);
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['enroll_student'])) {
@@ -739,6 +768,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['enroll_student'])) {
         }
         }
     }
+
+    finalizeImportRequest($success, $error, $importErrors);
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['enroll_student_group'])) {
@@ -799,6 +830,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['enroll_student_group']
             $insertGroupStmt->close();
         }
     }
+
+    finalizeImportRequest($success, $error, $importErrors);
 }
 
 $teachers = [];

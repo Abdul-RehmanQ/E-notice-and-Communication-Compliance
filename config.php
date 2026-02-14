@@ -21,6 +21,27 @@ else {
 // Set charset to UTF-8
 $conn->set_charset("utf8mb4");
 
+if (!defined('PASSWORD_ARGON2ID')) {
+    die('Server does not support Argon2id password hashing.');
+}
+
+function hashPasswordArgon2id($plainPassword) {
+    return password_hash($plainPassword, PASSWORD_ARGON2ID);
+}
+
+function verifyPasswordArgon2id($plainPassword, $storedHash) {
+    if (!is_string($storedHash) || $storedHash === '') {
+        return false;
+    }
+
+    $info = password_get_info($storedHash);
+    if (($info['algo'] ?? 0) !== PASSWORD_ARGON2ID) {
+        return false;
+    }
+
+    return password_verify($plainPassword, $storedHash);
+}
+
 // Optional: Function to safely close connection
 function closeConnection($conn) {
     if ($conn) {
