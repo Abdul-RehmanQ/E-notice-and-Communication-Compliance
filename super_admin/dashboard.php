@@ -1,6 +1,7 @@
 <?php
 session_start();
 include '../config.php';
+require_once '../vendor/autoload.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin') {
     header("Location: login.php");
@@ -9,7 +10,625 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin')
 
 $success = '';
 $error = '';
+$importErrors = [];
 $adminId = (int)$_SESSION['user_id'];
+
+$adminDepartment = '';
+$adminProfileStmt = $conn->prepare("SELECT department FROM super_admin WHERE super_admin_id = ?");
+$adminProfileStmt->bind_param("i", $adminId);
+$adminProfileStmt->execute();
+$adminProfileResult = $adminProfileStmt->get_result();
+$adminProfile = $adminProfileResult ? $adminProfileResult->fetch_assoc() : null;
+$adminProfileStmt->close();
+
+if (!$adminProfile || empty($adminProfile['department'])) {
+    $error = 'Super Admin department profile is missing. Please configure super_admin table entry first.';
+} else {
+    $adminDepartment = trim((string)$adminProfile['department']);
+}
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_students'])) {
+    if (!isset($_FILES['student_excel']) || $_FILES['student_excel']['error'] !== UPLOAD_ERR_OK) {
+        $error = 'Please select a valid Excel/CSV file to upload.';
+    } elseif ($adminDepartment === '') {
+        $error = 'Department scope is not configured for this super admin.';
+    } else {
+        $fileTmpPath = $_FILES['student_excel']['tmp_name'];
+        $fileName = $_FILES['student_excel']['name'];
+        $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        $allowedExtensions = ['xlsx', 'csv', 'ods'];
+
+        if (!in_array($fileExt, $allowedExtensions, true)) {
+            $error = 'Invalid file type. Allowed: .xlsx, .csv, .ods';
+        } else {
+            try {
+                $reader = match ($fileExt) {
+                    'xlsx' => new \OpenSpout\Reader\XLSX\Reader(),
+                    'csv' => new \OpenSpout\Reader\CSV\Reader(),
+                    'ods' => new \OpenSpout\Reader\ODS\Reader(),
+                    default => throw new Exception('Unsupported file type.'),
+                };
+                $reader->open($fileTmpPath);
+
+                $headerMap = [];
+                $processedRows = 0;
+                $createdUsers = 0;
+                $updatedUsers = 0;
+                $upsertedStudents = 0;
+
+                $conn->begin_transaction();
+
+                $selectUserStmt = $conn->prepare("SELECT user_id, role FROM user WHERE email = ?");
+                $insertUserStmt = $conn->prepare("INSERT INTO user (email, password, role) VALUES (?, ?, 'student')");
+                $updateUserPasswordStmt = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ?");
+                $rollConflictStmt = $conn->prepare("SELECT student_id FROM student WHERE Roll_no = ? AND student_id <> ? LIMIT 1");
+
+                $studentHasEmailColumn = false;
+                $studentEmailColResult = $conn->query("SHOW COLUMNS FROM student LIKE 'email'");
+                if ($studentEmailColResult && $studentEmailColResult->num_rows > 0) {
+                    $studentHasEmailColumn = true;
+                }
+
+                if ($studentHasEmailColumn) {
+                    $upsertStudentStmt = $conn->prepare("INSERT INTO student (student_id, name, Roll_no, department, semester_no, session, email) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), Roll_no = VALUES(Roll_no), department = VALUES(department), semester_no = VALUES(semester_no), session = VALUES(session), email = VALUES(email)");
+                } else {
+                    $upsertStudentStmt = $conn->prepare("INSERT INTO student (student_id, name, Roll_no, department, semester_no, session) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), Roll_no = VALUES(Roll_no), department = VALUES(department), semester_no = VALUES(semester_no), session = VALUES(session)");
+                }
+
+                $requiredColumns = [
+                    'email' => ['email', 'student_email'],
+                    'name' => ['name', 'student_name'],
+                    'password' => ['password', 'pass', 'default_password'],
+                    'roll_no' => ['roll_no', 'rollno', 'roll_number'],
+                    'session' => ['session'],
+                    'department' => ['department', 'dept'],
+                    'semester_no' => ['semester_no', 'semester', 'sem', 'semester_number']
+                ];
+
+                $getColumnValue = function (array $rowCells, array $map, array $aliases): string {
+                    foreach ($aliases as $alias) {
+                        if (isset($map[$alias])) {
+                            $index = $map[$alias];
+                            return trim((string)($rowCells[$index] ?? ''));
+                        }
+                    }
+                    return '';
+                };
+
+                $seenEmails = [];
+                $seenRollNumbers = [];
+
+                $sheetHandled = false;
+                foreach ($reader->getSheetIterator() as $sheet) {
+                    $rowNumber = 0;
+                    foreach ($sheet->getRowIterator() as $row) {
+                        $rowNumber++;
+                        $cells = array_map(static fn($cell) => trim((string)$cell), $row->toArray());
+
+                        if ($rowNumber === 1) {
+                            foreach ($cells as $index => $header) {
+                                $normalized = strtolower(preg_replace('/[^a-z0-9]+/', '_', $header));
+                                $normalized = trim($normalized, '_');
+                                if ($normalized !== '') {
+                                    $headerMap[$normalized] = $index;
+                                }
+                            }
+
+                            foreach ($requiredColumns as $field => $aliases) {
+                                $exists = false;
+                                foreach ($aliases as $alias) {
+                                    if (isset($headerMap[$alias])) {
+                                        $exists = true;
+                                        break;
+                                    }
+                                }
+                                if (!$exists) {
+                                    $importErrors[] = "Missing required column for '{$field}'.";
+                                }
+                            }
+                            continue;
+                        }
+
+                        if (count(array_filter($cells, static fn($value) => $value !== '')) === 0) {
+                            continue;
+                        }
+
+                        $processedRows++;
+
+                        $email = strtolower($getColumnValue($cells, $headerMap, $requiredColumns['email']));
+                        $name = $getColumnValue($cells, $headerMap, $requiredColumns['name']);
+                        $password = $getColumnValue($cells, $headerMap, $requiredColumns['password']);
+                        $rollNo = $getColumnValue($cells, $headerMap, $requiredColumns['roll_no']);
+                        $sessionValue = $getColumnValue($cells, $headerMap, $requiredColumns['session']);
+                        $department = $getColumnValue($cells, $headerMap, $requiredColumns['department']);
+                        $semesterRaw = $getColumnValue($cells, $headerMap, $requiredColumns['semester_no']);
+                        $semesterNo = (int)$semesterRaw;
+
+                        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                            $importErrors[] = "Row {$rowNumber}: Invalid or missing email.";
+                            continue;
+                        }
+                        if (isset($seenEmails[$email])) {
+                            $importErrors[] = "Row {$rowNumber}: Duplicate email '{$email}' found in uploaded file.";
+                            continue;
+                        }
+                        if ($name === '') {
+                            $importErrors[] = "Row {$rowNumber}: Name is required.";
+                            continue;
+                        }
+                        if ($password === '') {
+                            $importErrors[] = "Row {$rowNumber}: Password is required.";
+                            continue;
+                        }
+                        if ($rollNo === '') {
+                            $importErrors[] = "Row {$rowNumber}: Roll number is required.";
+                            continue;
+                        }
+                        if (isset($seenRollNumbers[$rollNo])) {
+                            $importErrors[] = "Row {$rowNumber}: Duplicate roll number '{$rollNo}' found in uploaded file.";
+                            continue;
+                        }
+                        if ($sessionValue === '') {
+                            $importErrors[] = "Row {$rowNumber}: Session is required.";
+                            continue;
+                        }
+                        if ($department === '') {
+                            $importErrors[] = "Row {$rowNumber}: Department is required.";
+                            continue;
+                        }
+                        if ($adminDepartment !== '' && strcasecmp(trim($department), trim($adminDepartment)) !== 0) {
+                            $importErrors[] = "Row {$rowNumber}: Department '{$department}' is outside your scope ({$adminDepartment}).";
+                            continue;
+                        }
+                        if ($semesterNo < 1 || $semesterNo > 12) {
+                            $importErrors[] = "Row {$rowNumber}: Semester must be between 1 and 12.";
+                            continue;
+                        }
+
+                        $seenEmails[$email] = true;
+                        $seenRollNumbers[$rollNo] = true;
+
+                        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+
+                        $selectUserStmt->bind_param("s", $email);
+                        $selectUserStmt->execute();
+                        $userResult = $selectUserStmt->get_result();
+
+                        $userId = 0;
+                        if ($userResult && $userResult->num_rows > 0) {
+                            $existingUser = $userResult->fetch_assoc();
+                            if (($existingUser['role'] ?? '') !== 'student') {
+                                $importErrors[] = "Row {$rowNumber}: Email already belongs to a non-student role.";
+                                continue;
+                            }
+
+                            $userId = (int)$existingUser['user_id'];
+                            $updateUserPasswordStmt->bind_param("si", $hashedPassword, $userId);
+                            if (!$updateUserPasswordStmt->execute()) {
+                                $importErrors[] = "Row {$rowNumber}: Failed to update student password.";
+                                continue;
+                            }
+                            $updatedUsers++;
+                        } else {
+                            $insertUserStmt->bind_param("ss", $email, $hashedPassword);
+                            if (!$insertUserStmt->execute()) {
+                                $importErrors[] = "Row {$rowNumber}: Failed to create user ({$conn->error}).";
+                                continue;
+                            }
+
+                            $userId = (int)$conn->insert_id;
+                            $createdUsers++;
+                        }
+
+                        $rollConflictStmt->bind_param("si", $rollNo, $userId);
+                        $rollConflictStmt->execute();
+                        $rollConflictResult = $rollConflictStmt->get_result();
+                        if ($rollConflictResult && $rollConflictResult->num_rows > 0) {
+                            $importErrors[] = "Row {$rowNumber}: Roll number '{$rollNo}' is already assigned to another student.";
+                            continue;
+                        }
+
+                        if ($studentHasEmailColumn) {
+                            $upsertStudentStmt->bind_param("isssiss", $userId, $name, $rollNo, $department, $semesterNo, $sessionValue, $email);
+                        } else {
+                            $upsertStudentStmt->bind_param("isssis", $userId, $name, $rollNo, $department, $semesterNo, $sessionValue);
+                        }
+                        if (!$upsertStudentStmt->execute()) {
+                            $importErrors[] = "Row {$rowNumber}: Failed to upsert student profile ({$conn->error}).";
+                            continue;
+                        }
+                        $upsertedStudents++;
+                    }
+
+                    $sheetHandled = true;
+                    break;
+                }
+
+                $reader->close();
+
+                $selectUserStmt->close();
+                $insertUserStmt->close();
+                $updateUserPasswordStmt->close();
+                $rollConflictStmt->close();
+                $upsertStudentStmt->close();
+
+                if (!$sheetHandled) {
+                    $importErrors[] = 'Uploaded file did not contain readable sheets.';
+                }
+
+                if (!empty($importErrors)) {
+                    $conn->rollback();
+                    $error = 'Import failed. Found ' . count($importErrors) . ' issue(s).';
+                } else {
+                    $conn->commit();
+                    $success = "Import completed: {$processedRows} row(s) processed, {$createdUsers} new user(s), {$updatedUsers} existing user(s) updated, {$upsertedStudents} student profile(s) synced.";
+                }
+            } catch (Throwable $exception) {
+                if ($conn->errno) {
+                    $conn->rollback();
+                }
+                $error = 'Import failed: ' . $exception->getMessage();
+            }
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_teachers'])) {
+    if (!isset($_FILES['teacher_excel']) || $_FILES['teacher_excel']['error'] !== UPLOAD_ERR_OK) {
+        $error = 'Please select a valid teacher Excel/CSV file to upload.';
+    } elseif ($adminDepartment === '') {
+        $error = 'Department scope is not configured for this super admin.';
+    } else {
+        $fileTmpPath = $_FILES['teacher_excel']['tmp_name'];
+        $fileName = $_FILES['teacher_excel']['name'];
+        $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        $allowedExtensions = ['xlsx', 'csv', 'ods'];
+
+        if (!in_array($fileExt, $allowedExtensions, true)) {
+            $error = 'Invalid teacher file type. Allowed: .xlsx, .csv, .ods';
+        } else {
+            try {
+                $reader = match ($fileExt) {
+                    'xlsx' => new \OpenSpout\Reader\XLSX\Reader(),
+                    'csv' => new \OpenSpout\Reader\CSV\Reader(),
+                    'ods' => new \OpenSpout\Reader\ODS\Reader(),
+                    default => throw new Exception('Unsupported file type.'),
+                };
+                $reader->open($fileTmpPath);
+
+                $headerMap = [];
+                $processedRows = 0;
+                $createdUsers = 0;
+                $updatedUsers = 0;
+                $upsertedTeachers = 0;
+
+                $conn->begin_transaction();
+
+                $selectUserStmt = $conn->prepare("SELECT user_id, role FROM user WHERE email = ?");
+                $insertUserStmt = $conn->prepare("INSERT INTO user (email, password, role) VALUES (?, ?, 'teacher')");
+                $updateUserPasswordStmt = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ?");
+                $upsertTeacherStmt = $conn->prepare("INSERT INTO teacher (teacher_id, name, department) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), department = VALUES(department)");
+
+                $requiredColumns = [
+                    'email' => ['email', 'teacher_email'],
+                    'name' => ['name', 'teacher_name'],
+                    'password' => ['password', 'pass', 'default_password'],
+                    'department' => ['department', 'dept']
+                ];
+
+                $getColumnValue = function (array $rowCells, array $map, array $aliases): string {
+                    foreach ($aliases as $alias) {
+                        if (isset($map[$alias])) {
+                            $index = $map[$alias];
+                            return trim((string)($rowCells[$index] ?? ''));
+                        }
+                    }
+                    return '';
+                };
+
+                $seenEmails = [];
+                $sheetHandled = false;
+
+                foreach ($reader->getSheetIterator() as $sheet) {
+                    $rowNumber = 0;
+                    foreach ($sheet->getRowIterator() as $row) {
+                        $rowNumber++;
+                        $cells = array_map(static fn($cell) => trim((string)$cell), $row->toArray());
+
+                        if ($rowNumber === 1) {
+                            foreach ($cells as $index => $header) {
+                                $normalized = strtolower(preg_replace('/[^a-z0-9]+/', '_', $header));
+                                $normalized = trim($normalized, '_');
+                                if ($normalized !== '') {
+                                    $headerMap[$normalized] = $index;
+                                }
+                            }
+
+                            foreach ($requiredColumns as $field => $aliases) {
+                                $exists = false;
+                                foreach ($aliases as $alias) {
+                                    if (isset($headerMap[$alias])) {
+                                        $exists = true;
+                                        break;
+                                    }
+                                }
+                                if (!$exists) {
+                                    $importErrors[] = "Missing required column for '{$field}' in teacher file.";
+                                }
+                            }
+                            continue;
+                        }
+
+                        if (count(array_filter($cells, static fn($value) => $value !== '')) === 0) {
+                            continue;
+                        }
+
+                        $processedRows++;
+                        $email = strtolower($getColumnValue($cells, $headerMap, $requiredColumns['email']));
+                        $name = $getColumnValue($cells, $headerMap, $requiredColumns['name']);
+                        $password = $getColumnValue($cells, $headerMap, $requiredColumns['password']);
+                        $department = $getColumnValue($cells, $headerMap, $requiredColumns['department']);
+
+                        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                            $importErrors[] = "Teacher row {$rowNumber}: Invalid or missing email.";
+                            continue;
+                        }
+                        if (isset($seenEmails[$email])) {
+                            $importErrors[] = "Teacher row {$rowNumber}: Duplicate email '{$email}' in uploaded file.";
+                            continue;
+                        }
+                        if ($name === '') {
+                            $importErrors[] = "Teacher row {$rowNumber}: Name is required.";
+                            continue;
+                        }
+                        if ($password === '') {
+                            $importErrors[] = "Teacher row {$rowNumber}: Password is required.";
+                            continue;
+                        }
+                        if ($department === '') {
+                            $importErrors[] = "Teacher row {$rowNumber}: Department is required.";
+                            continue;
+                        }
+                        if ($adminDepartment !== '' && strcasecmp(trim($department), trim($adminDepartment)) !== 0) {
+                            $importErrors[] = "Teacher row {$rowNumber}: Department '{$department}' is outside your scope ({$adminDepartment}).";
+                            continue;
+                        }
+
+                        $seenEmails[$email] = true;
+                        $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+
+                        $selectUserStmt->bind_param("s", $email);
+                        $selectUserStmt->execute();
+                        $userResult = $selectUserStmt->get_result();
+
+                        $userId = 0;
+                        if ($userResult && $userResult->num_rows > 0) {
+                            $existingUser = $userResult->fetch_assoc();
+                            if (($existingUser['role'] ?? '') !== 'teacher') {
+                                $importErrors[] = "Teacher row {$rowNumber}: Email already belongs to a non-teacher role.";
+                                continue;
+                            }
+
+                            $userId = (int)$existingUser['user_id'];
+                            $updateUserPasswordStmt->bind_param("si", $hashedPassword, $userId);
+                            if (!$updateUserPasswordStmt->execute()) {
+                                $importErrors[] = "Teacher row {$rowNumber}: Failed to update teacher password.";
+                                continue;
+                            }
+                            $updatedUsers++;
+                        } else {
+                            $insertUserStmt->bind_param("ss", $email, $hashedPassword);
+                            if (!$insertUserStmt->execute()) {
+                                $importErrors[] = "Teacher row {$rowNumber}: Failed to create user ({$conn->error}).";
+                                continue;
+                            }
+                            $userId = (int)$conn->insert_id;
+                            $createdUsers++;
+                        }
+
+                        $upsertTeacherStmt->bind_param("iss", $userId, $name, $department);
+                        if (!$upsertTeacherStmt->execute()) {
+                            $importErrors[] = "Teacher row {$rowNumber}: Failed to upsert teacher profile ({$conn->error}).";
+                            continue;
+                        }
+                        $upsertedTeachers++;
+                    }
+
+                    $sheetHandled = true;
+                    break;
+                }
+
+                $reader->close();
+                $selectUserStmt->close();
+                $insertUserStmt->close();
+                $updateUserPasswordStmt->close();
+                $upsertTeacherStmt->close();
+
+                if (!$sheetHandled) {
+                    $importErrors[] = 'Teacher file did not contain readable sheets.';
+                }
+
+                if (!empty($importErrors)) {
+                    $conn->rollback();
+                    $error = 'Teacher import failed. Found ' . count($importErrors) . ' issue(s).';
+                } else {
+                    $conn->commit();
+                    $success = "Teacher import completed: {$processedRows} row(s), {$createdUsers} new user(s), {$updatedUsers} existing user(s) updated, {$upsertedTeachers} teacher profile(s) synced.";
+                }
+            } catch (Throwable $exception) {
+                if ($conn->errno) {
+                    $conn->rollback();
+                }
+                $error = 'Teacher import failed: ' . $exception->getMessage();
+            }
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['import_courses'])) {
+    if (!isset($_FILES['course_excel']) || $_FILES['course_excel']['error'] !== UPLOAD_ERR_OK) {
+        $error = 'Please select a valid course Excel/CSV file to upload.';
+    } elseif ($adminDepartment === '') {
+        $error = 'Department scope is not configured for this super admin.';
+    } else {
+        $fileTmpPath = $_FILES['course_excel']['tmp_name'];
+        $fileName = $_FILES['course_excel']['name'];
+        $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+        $allowedExtensions = ['xlsx', 'csv', 'ods'];
+
+        if (!in_array($fileExt, $allowedExtensions, true)) {
+            $error = 'Invalid course file type. Allowed: .xlsx, .csv, .ods';
+        } else {
+            try {
+                $reader = match ($fileExt) {
+                    'xlsx' => new \OpenSpout\Reader\XLSX\Reader(),
+                    'csv' => new \OpenSpout\Reader\CSV\Reader(),
+                    'ods' => new \OpenSpout\Reader\ODS\Reader(),
+                    default => throw new Exception('Unsupported file type.'),
+                };
+                $reader->open($fileTmpPath);
+
+                $headerMap = [];
+                $processedRows = 0;
+                $upsertedCourses = 0;
+
+                $conn->begin_transaction();
+
+                $upsertCourseStmt = $conn->prepare("INSERT INTO courses (course_code, course_title, department, semester_no, credit_hours) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE course_title = VALUES(course_title), department = VALUES(department), semester_no = VALUES(semester_no), credit_hours = VALUES(credit_hours)");
+
+                $requiredColumns = [
+                    'course_code' => ['course_code', 'code'],
+                    'course_title' => ['course_title', 'title', 'course_name'],
+                    'department' => ['department', 'dept'],
+                    'semester_no' => ['semester_no', 'semester', 'sem']
+                ];
+
+                $optionalColumns = [
+                    'credit_hours' => ['credit_hours', 'credits', 'credit']
+                ];
+
+                $getColumnValue = function (array $rowCells, array $map, array $aliases): string {
+                    foreach ($aliases as $alias) {
+                        if (isset($map[$alias])) {
+                            $index = $map[$alias];
+                            return trim((string)($rowCells[$index] ?? ''));
+                        }
+                    }
+                    return '';
+                };
+
+                $seenCourseCodes = [];
+                $sheetHandled = false;
+
+                foreach ($reader->getSheetIterator() as $sheet) {
+                    $rowNumber = 0;
+                    foreach ($sheet->getRowIterator() as $row) {
+                        $rowNumber++;
+                        $cells = array_map(static fn($cell) => trim((string)$cell), $row->toArray());
+
+                        if ($rowNumber === 1) {
+                            foreach ($cells as $index => $header) {
+                                $normalized = strtolower(preg_replace('/[^a-z0-9]+/', '_', $header));
+                                $normalized = trim($normalized, '_');
+                                if ($normalized !== '') {
+                                    $headerMap[$normalized] = $index;
+                                }
+                            }
+
+                            foreach ($requiredColumns as $field => $aliases) {
+                                $exists = false;
+                                foreach ($aliases as $alias) {
+                                    if (isset($headerMap[$alias])) {
+                                        $exists = true;
+                                        break;
+                                    }
+                                }
+                                if (!$exists) {
+                                    $importErrors[] = "Missing required column for '{$field}' in course file.";
+                                }
+                            }
+                            continue;
+                        }
+
+                        if (count(array_filter($cells, static fn($value) => $value !== '')) === 0) {
+                            continue;
+                        }
+
+                        $processedRows++;
+
+                        $courseCode = strtoupper($getColumnValue($cells, $headerMap, $requiredColumns['course_code']));
+                        $courseTitle = $getColumnValue($cells, $headerMap, $requiredColumns['course_title']);
+                        $department = $getColumnValue($cells, $headerMap, $requiredColumns['department']);
+                        $semesterNo = (int)$getColumnValue($cells, $headerMap, $requiredColumns['semester_no']);
+                        $creditHoursRaw = $getColumnValue($cells, $headerMap, $optionalColumns['credit_hours']);
+                        $creditHours = $creditHoursRaw === '' ? 3 : (int)$creditHoursRaw;
+
+                        if ($courseCode === '') {
+                            $importErrors[] = "Course row {$rowNumber}: Course code is required.";
+                            continue;
+                        }
+                        if (isset($seenCourseCodes[$courseCode])) {
+                            $importErrors[] = "Course row {$rowNumber}: Duplicate course code '{$courseCode}' in uploaded file.";
+                            continue;
+                        }
+                        if ($courseTitle === '') {
+                            $importErrors[] = "Course row {$rowNumber}: Course title is required.";
+                            continue;
+                        }
+                        if ($department === '') {
+                            $importErrors[] = "Course row {$rowNumber}: Department is required.";
+                            continue;
+                        }
+                        if ($adminDepartment !== '' && strcasecmp(trim($department), trim($adminDepartment)) !== 0) {
+                            $importErrors[] = "Course row {$rowNumber}: Department '{$department}' is outside your scope ({$adminDepartment}).";
+                            continue;
+                        }
+                        if ($semesterNo < 1 || $semesterNo > 12) {
+                            $importErrors[] = "Course row {$rowNumber}: Semester must be between 1 and 12.";
+                            continue;
+                        }
+                        if ($creditHours < 1 || $creditHours > 10) {
+                            $importErrors[] = "Course row {$rowNumber}: Credit hours must be between 1 and 10.";
+                            continue;
+                        }
+
+                        $seenCourseCodes[$courseCode] = true;
+
+                        $upsertCourseStmt->bind_param("sssii", $courseCode, $courseTitle, $department, $semesterNo, $creditHours);
+                        if (!$upsertCourseStmt->execute()) {
+                            $importErrors[] = "Course row {$rowNumber}: Failed to upsert course ({$conn->error}).";
+                            continue;
+                        }
+                        $upsertedCourses++;
+                    }
+
+                    $sheetHandled = true;
+                    break;
+                }
+
+                $reader->close();
+                $upsertCourseStmt->close();
+
+                if (!$sheetHandled) {
+                    $importErrors[] = 'Course file did not contain readable sheets.';
+                }
+
+                if (!empty($importErrors)) {
+                    $conn->rollback();
+                    $error = 'Course import failed. Found ' . count($importErrors) . ' issue(s).';
+                } else {
+                    $conn->commit();
+                    $success = "Course import completed: {$processedRows} row(s) processed, {$upsertedCourses} course(s) synced.";
+                }
+            } catch (Throwable $exception) {
+                if ($conn->errno) {
+                    $conn->rollback();
+                }
+                $error = 'Course import failed: ' . $exception->getMessage();
+            }
+        }
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['assign_course'])) {
     $teacherId = (int)($_POST['teacher_id'] ?? 0);
@@ -17,7 +636,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['assign_course'])) {
 
     if ($teacherId <= 0 || $courseId <= 0) {
         $error = 'Please select both teacher and course.';
+    } elseif ($adminDepartment === '') {
+        $error = 'Department scope is not configured for this super admin.';
     } else {
+        $scopeStmt = $conn->prepare("SELECT COUNT(*) AS matched_count
+                                     FROM teacher t
+                                     INNER JOIN courses c ON c.course_id = ?
+                                     WHERE t.teacher_id = ?
+                                       AND LOWER(TRIM(t.department)) = LOWER(TRIM(?))
+                                       AND LOWER(TRIM(c.department)) = LOWER(TRIM(?))");
+        $scopeStmt->bind_param("iiss", $courseId, $teacherId, $adminDepartment, $adminDepartment);
+        $scopeStmt->execute();
+        $scopeResult = $scopeStmt->get_result();
+        $scopeRow = $scopeResult ? $scopeResult->fetch_assoc() : ['matched_count' => 0];
+        $scopeStmt->close();
+
+        if ((int)($scopeRow['matched_count'] ?? 0) === 0) {
+            $error = 'Assignment blocked: teacher and course must belong to your department.';
+        } else {
         $checkStmt = $conn->prepare("SELECT assignment_id FROM teacher_course_assignments WHERE teacher_id = ? AND course_id = ?");
         $checkStmt->bind_param("ii", $teacherId, $courseId);
         $checkStmt->execute();
@@ -37,6 +673,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['assign_course'])) {
             }
             $stmt->close();
         }
+        }
     }
 }
 
@@ -46,7 +683,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['enroll_student'])) {
 
     if ($studentId <= 0 || $courseId <= 0) {
         $error = 'Please select both student and course.';
+    } elseif ($adminDepartment === '') {
+        $error = 'Department scope is not configured for this super admin.';
     } else {
+        $scopeStmt = $conn->prepare("SELECT COUNT(*) AS matched_count
+                                     FROM student s
+                                     INNER JOIN courses c ON c.course_id = ?
+                                     WHERE s.student_id = ?
+                                       AND LOWER(TRIM(s.department)) = LOWER(TRIM(?))
+                                       AND LOWER(TRIM(c.department)) = LOWER(TRIM(?))");
+        $scopeStmt->bind_param("iiss", $courseId, $studentId, $adminDepartment, $adminDepartment);
+        $scopeStmt->execute();
+        $scopeResult = $scopeStmt->get_result();
+        $scopeRow = $scopeResult ? $scopeResult->fetch_assoc() : ['matched_count' => 0];
+        $scopeStmt->close();
+
+        if ((int)($scopeRow['matched_count'] ?? 0) === 0) {
+            $error = 'Enrollment blocked: student and course must belong to your department.';
+        } else {
+        $assignmentScopeStmt = $conn->prepare("SELECT COUNT(*) AS assigned_count
+                                               FROM teacher_course_assignments tca
+                                               INNER JOIN teacher t ON t.teacher_id = tca.teacher_id
+                                               INNER JOIN courses c ON c.course_id = tca.course_id
+                                               WHERE tca.course_id = ?
+                                                 AND LOWER(TRIM(t.department)) = LOWER(TRIM(?))
+                                                 AND LOWER(TRIM(c.department)) = LOWER(TRIM(?))");
+        $assignmentScopeStmt->bind_param("iss", $courseId, $adminDepartment, $adminDepartment);
+        $assignmentScopeStmt->execute();
+        $assignmentScopeResult = $assignmentScopeStmt->get_result();
+        $assignmentScopeRow = $assignmentScopeResult ? $assignmentScopeResult->fetch_assoc() : ['assigned_count' => 0];
+        $assignmentScopeStmt->close();
+
+        if ((int)($assignmentScopeRow['assigned_count'] ?? 0) === 0) {
+            $error = 'Enrollment blocked: selected course has no teacher assigned yet.';
+        } else {
         $checkStmt = $conn->prepare("SELECT enrollment_id FROM student_course_enrollments WHERE student_id = ? AND course_id = ?");
         $checkStmt->bind_param("ii", $studentId, $courseId);
         $checkStmt->execute();
@@ -66,58 +736,191 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['enroll_student'])) {
             }
             $stmt->close();
         }
+        }
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['enroll_student_group'])) {
+    $groupDepartment = trim($_POST['group_department'] ?? '');
+    $groupSession = trim($_POST['group_session'] ?? '');
+    $groupSemester = (int)($_POST['group_semester_no'] ?? 0);
+    $courseId = (int)($_POST['group_enroll_course_id'] ?? 0);
+
+    if ($groupDepartment === '' || $groupSession === '' || $groupSemester <= 0 || $courseId <= 0) {
+        $error = 'Please select department, session, semester, and course for group enrollment.';
+    } elseif ($adminDepartment === '') {
+        $error = 'Department scope is not configured for this super admin.';
+    } elseif (strcasecmp(trim($groupDepartment), trim($adminDepartment)) !== 0) {
+        $error = 'Group enrollment blocked: you can only enroll students from your own department.';
+    } else {
+                $courseSemesterStmt = $conn->prepare("SELECT c.semester_no,
+                                                                                                         (SELECT COUNT(*)
+                                                                                                            FROM teacher_course_assignments tca
+                                                                                                            INNER JOIN teacher t ON t.teacher_id = tca.teacher_id
+                                                                                                            WHERE tca.course_id = c.course_id
+                                                                                                                AND LOWER(TRIM(t.department)) = LOWER(TRIM(?))) AS assigned_count
+                                                                                            FROM courses c
+                                                                                            WHERE c.course_id = ?");
+                $courseSemesterStmt->bind_param("si", $adminDepartment, $courseId);
+                $courseSemesterStmt->execute();
+                $courseSemesterResult = $courseSemesterStmt->get_result();
+                $courseRow = $courseSemesterResult ? $courseSemesterResult->fetch_assoc() : null;
+                $courseSemesterStmt->close();
+
+        if (!$courseRow) {
+            $error = 'Selected course was not found.';
+        } elseif ((int)($courseRow['assigned_count'] ?? 0) === 0) {
+            $error = 'Group enrollment blocked: selected course has no teacher assigned yet.';
+        } elseif ((int)$courseRow['semester_no'] !== $groupSemester) {
+            $error = 'Course semester does not match selected student semester.';
+        } else {
+            $insertGroupStmt = $conn->prepare("INSERT INTO student_course_enrollments (student_id, course_id, enrolled_by)
+                                               SELECT s.student_id, ?, ?
+                                               FROM student s
+                                               LEFT JOIN student_course_enrollments sce
+                                                 ON sce.student_id = s.student_id AND sce.course_id = ?
+                                               WHERE s.department = ?
+                                                 AND s.session = ?
+                                                 AND s.semester_no = ?
+                                                 AND sce.student_id IS NULL");
+            $insertGroupStmt->bind_param("iiissi", $courseId, $adminId, $courseId, $groupDepartment, $groupSession, $groupSemester);
+
+            if ($insertGroupStmt->execute()) {
+                $addedCount = $insertGroupStmt->affected_rows;
+                if ($addedCount > 0) {
+                    $success = "Group enrollment completed: {$addedCount} student(s) enrolled.";
+                } else {
+                    $error = 'No new students were enrolled (they may already be enrolled or no students matched this group).';
+                }
+            } else {
+                $error = 'Group enrollment failed: ' . $conn->error;
+            }
+            $insertGroupStmt->close();
+        }
     }
 }
 
 $teachers = [];
-$teacherResult = $conn->query("SELECT teacher_id, name, department FROM teacher ORDER BY name ASC");
+$teacherStmt = $conn->prepare("SELECT teacher_id, name, department FROM teacher WHERE LOWER(TRIM(department)) = LOWER(TRIM(?)) ORDER BY name ASC");
+$teacherStmt->bind_param("s", $adminDepartment);
+$teacherStmt->execute();
+$teacherResult = $teacherStmt->get_result();
 if ($teacherResult) {
     while ($row = $teacherResult->fetch_assoc()) {
         $teachers[] = $row;
     }
 }
+$teacherStmt->close();
 
 $students = [];
-$studentResult = $conn->query("SELECT student_id, name, Roll_no, department, semester_no FROM student ORDER BY name ASC");
+$studentStmt = $conn->prepare("SELECT student_id, name, Roll_no, department, session, semester_no FROM student WHERE LOWER(TRIM(department)) = LOWER(TRIM(?)) ORDER BY department ASC, session ASC, semester_no ASC, name ASC");
+$studentStmt->bind_param("s", $adminDepartment);
+$studentStmt->execute();
+$studentResult = $studentStmt->get_result();
 if ($studentResult) {
     while ($row = $studentResult->fetch_assoc()) {
         $students[] = $row;
     }
 }
+$studentStmt->close();
+
+$studentsByGroup = [];
+$groupDepartments = [];
+$groupSessions = [];
+$groupSemesters = [];
+
+foreach ($students as $student) {
+    $department = $student['department'] ?? 'Unknown';
+    $sessionValue = $student['session'] ?? 'Unknown';
+    $semesterValue = (int)($student['semester_no'] ?? 0);
+
+    $groupKey = $department . ' | ' . $sessionValue . ' | Sem ' . $semesterValue;
+    if (!isset($studentsByGroup[$groupKey])) {
+        $studentsByGroup[$groupKey] = [];
+    }
+    $studentsByGroup[$groupKey][] = $student;
+
+    $groupDepartments[$department] = true;
+    $groupSessions[$sessionValue] = true;
+    if ($semesterValue > 0) {
+        $groupSemesters[$semesterValue] = true;
+    }
+}
+
+ksort($studentsByGroup);
+$groupDepartments = array_keys($groupDepartments);
+$groupSessions = array_keys($groupSessions);
+$groupSemesters = array_keys($groupSemesters);
+sort($groupDepartments);
+sort($groupSessions);
+sort($groupSemesters, SORT_NUMERIC);
 
 $courses = [];
-$courseResult = $conn->query("SELECT course_id, course_code, course_title, department, semester_no FROM courses WHERE is_active = 1 ORDER BY course_code ASC");
+$courseStmt = $conn->prepare("SELECT course_id, course_code, course_title, department, semester_no FROM courses WHERE LOWER(TRIM(department)) = LOWER(TRIM(?)) ORDER BY course_code ASC");
+$courseStmt->bind_param("s", $adminDepartment);
+$courseStmt->execute();
+$courseResult = $courseStmt->get_result();
 if ($courseResult) {
     while ($row = $courseResult->fetch_assoc()) {
         $courses[] = $row;
     }
 }
+$courseStmt->close();
+
+$enrollableCourses = [];
+$enrollableCourseStmt = $conn->prepare("SELECT DISTINCT c.course_id, c.course_code, c.course_title, c.department, c.semester_no
+                                                                             FROM courses c
+                                                                             INNER JOIN teacher_course_assignments tca ON tca.course_id = c.course_id
+                                                                             INNER JOIN teacher t ON t.teacher_id = tca.teacher_id
+                                                                             WHERE LOWER(TRIM(c.department)) = LOWER(TRIM(?))
+                                                                                 AND LOWER(TRIM(t.department)) = LOWER(TRIM(?))
+                                                                             ORDER BY c.course_code ASC");
+$enrollableCourseStmt->bind_param("ss", $adminDepartment, $adminDepartment);
+$enrollableCourseStmt->execute();
+$enrollableCourseResult = $enrollableCourseStmt->get_result();
+if ($enrollableCourseResult) {
+        while ($row = $enrollableCourseResult->fetch_assoc()) {
+                $enrollableCourses[] = $row;
+        }
+}
+$enrollableCourseStmt->close();
 
 $recentAssignments = [];
-$assignmentResult = $conn->query("SELECT tca.assigned_at, t.name AS teacher_name, c.course_code, c.course_title, u.email AS assigned_by_email
-                                 FROM teacher_course_assignments tca
-                                 INNER JOIN teacher t ON t.teacher_id = tca.teacher_id
-                                 INNER JOIN courses c ON c.course_id = tca.course_id
-                                 INNER JOIN user u ON u.user_id = tca.assigned_by
-                                 ORDER BY tca.assigned_at DESC LIMIT 10");
+$assignmentStmt = $conn->prepare("SELECT tca.assigned_at, t.name AS teacher_name, c.course_code, c.course_title, u.email AS assigned_by_email
+                                  FROM teacher_course_assignments tca
+                                  INNER JOIN teacher t ON t.teacher_id = tca.teacher_id
+                                  INNER JOIN courses c ON c.course_id = tca.course_id
+                                  INNER JOIN user u ON u.user_id = tca.assigned_by
+                                  WHERE LOWER(TRIM(t.department)) = LOWER(TRIM(?))
+                                  ORDER BY tca.assigned_at DESC LIMIT 10");
+$assignmentStmt->bind_param("s", $adminDepartment);
+$assignmentStmt->execute();
+$assignmentResult = $assignmentStmt->get_result();
 if ($assignmentResult) {
     while ($row = $assignmentResult->fetch_assoc()) {
         $recentAssignments[] = $row;
     }
 }
+$assignmentStmt->close();
 
 $recentEnrollments = [];
-$enrollmentResult = $conn->query("SELECT sce.enrolled_at, s.name AS student_name, s.Roll_no, c.course_code, c.course_title, u.email AS enrolled_by_email
-                                 FROM student_course_enrollments sce
-                                 INNER JOIN student s ON s.student_id = sce.student_id
-                                 INNER JOIN courses c ON c.course_id = sce.course_id
-                                 INNER JOIN user u ON u.user_id = sce.enrolled_by
-                                 ORDER BY sce.enrolled_at DESC LIMIT 10");
+$enrollmentStmt = $conn->prepare("SELECT sce.enrolled_at, s.name AS student_name, s.Roll_no, c.course_code, c.course_title, u.email AS enrolled_by_email
+                                  FROM student_course_enrollments sce
+                                  INNER JOIN student s ON s.student_id = sce.student_id
+                                  INNER JOIN courses c ON c.course_id = sce.course_id
+                                  INNER JOIN user u ON u.user_id = sce.enrolled_by
+                                  WHERE LOWER(TRIM(s.department)) = LOWER(TRIM(?))
+                                  ORDER BY sce.enrolled_at DESC LIMIT 10");
+$enrollmentStmt->bind_param("s", $adminDepartment);
+$enrollmentStmt->execute();
+$enrollmentResult = $enrollmentStmt->get_result();
 if ($enrollmentResult) {
     while ($row = $enrollmentResult->fetch_assoc()) {
         $recentEnrollments[] = $row;
     }
 }
+$enrollmentStmt->close();
 
 $counts = [
     'teachers' => 0,
@@ -127,15 +930,25 @@ $counts = [
     'enrollments' => 0
 ];
 
-$countResult = $conn->query("SELECT
-    (SELECT COUNT(*) FROM teacher) AS teachers,
-    (SELECT COUNT(*) FROM student) AS students,
-    (SELECT COUNT(*) FROM courses WHERE is_active = 1) AS courses,
-    (SELECT COUNT(*) FROM teacher_course_assignments) AS assignments,
-    (SELECT COUNT(*) FROM student_course_enrollments WHERE status = 'active') AS enrollments");
+$countStmt = $conn->prepare("SELECT
+    (SELECT COUNT(*) FROM teacher WHERE LOWER(TRIM(department)) = LOWER(TRIM(?))) AS teachers,
+    (SELECT COUNT(*) FROM student WHERE LOWER(TRIM(department)) = LOWER(TRIM(?))) AS students,
+    (SELECT COUNT(*) FROM courses WHERE LOWER(TRIM(department)) = LOWER(TRIM(?))) AS courses,
+    (SELECT COUNT(*)
+        FROM teacher_course_assignments tca
+        INNER JOIN teacher t ON t.teacher_id = tca.teacher_id
+        WHERE LOWER(TRIM(t.department)) = LOWER(TRIM(?))) AS assignments,
+    (SELECT COUNT(*)
+        FROM student_course_enrollments sce
+        INNER JOIN student s ON s.student_id = sce.student_id
+        WHERE sce.status = 'active' AND LOWER(TRIM(s.department)) = LOWER(TRIM(?))) AS enrollments");
+$countStmt->bind_param("sssss", $adminDepartment, $adminDepartment, $adminDepartment, $adminDepartment, $adminDepartment);
+$countStmt->execute();
+$countResult = $countStmt->get_result();
 if ($countResult) {
     $counts = $countResult->fetch_assoc();
 }
+$countStmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -172,6 +985,8 @@ if ($countResult) {
                 <span><strong>Super Admin:</strong> <?php echo htmlspecialchars($_SESSION['super_admin_name'] ?? 'Admin'); ?></span>
                 <span>|</span>
                 <span><strong>Email:</strong> <?php echo htmlspecialchars($_SESSION['super_admin_email'] ?? ''); ?></span>
+                <span>|</span>
+                <span><strong>Department:</strong> <?php echo htmlspecialchars($adminDepartment ?: 'Not Set'); ?></span>
             </div>
         </div>
     </nav>
@@ -196,6 +1011,7 @@ if ($countResult) {
                     <h4 class="mb-4"><a href="dashboard.php" class="text-white text-decoration-none">Super Admin Panel</a></h4>
                     <nav class="nav flex-column">
                         <a class="nav-link text-white active bg-secondary rounded mb-2" href="dashboard.php"><i class="fas fa-gauge me-2"></i>Dashboard</a>
+                        <a class="nav-link text-white mb-2" href="re_enroll.php"><i class="fas fa-search me-2"></i>Re-enroll Search</a>
                         <a class="nav-link text-white mb-2" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a>
                         <button class="nav-link btn btn-link text-white text-start mb-2" id="logout-btn"><i class="fas fa-sign-out-alt me-2"></i>Log out</button>
                     </nav>
@@ -220,6 +1036,20 @@ if ($countResult) {
                         </div>
                     <?php endif; ?>
 
+                    <?php if (!empty($importErrors)): ?>
+                        <div class="alert alert-warning">
+                            <h6 class="mb-2">Import Validation Details</h6>
+                            <ul class="mb-0">
+                                <?php foreach (array_slice($importErrors, 0, 12) as $importError): ?>
+                                    <li><?php echo htmlspecialchars($importError); ?></li>
+                                <?php endforeach; ?>
+                                <?php if (count($importErrors) > 12): ?>
+                                    <li>...and <?php echo count($importErrors) - 12; ?> more issue(s).</li>
+                                <?php endif; ?>
+                            </ul>
+                        </div>
+                    <?php endif; ?>
+
                     <div class="row mb-4">
                         <div class="col-md-4 col-lg-2 mb-3">
                             <div class="card text-bg-primary"><div class="card-body text-center"><h5 class="mb-0"><?php echo (int)$counts['teachers']; ?></h5><small>Teachers</small></div></div>
@@ -238,8 +1068,186 @@ if ($countResult) {
                         </div>
                     </div>
 
-                    <div class="row">
-                        <div class="col-lg-6 mb-4">
+                    <div class="card shadow-sm mb-4">
+                        <div class="card-body d-flex flex-wrap gap-2">
+                            <a href="#students-section" class="btn btn-outline-success btn-sm">Students Section</a>
+                            <a href="#teachers-section" class="btn btn-outline-primary btn-sm">Teachers Section</a>
+                            <a href="#courses-section" class="btn btn-outline-info btn-sm">Courses Section</a>
+                        </div>
+                    </div>
+
+                    <section id="students-section" class="mb-5">
+                        <h4 class="mb-3"><i class="fas fa-user-graduate me-2"></i>Students</h4>
+                        <div class="row">
+                            <div class="col-lg-6 mb-4">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header"><h5 class="mb-0">Individual Re-enroll (Search)</h5></div>
+                                    <div class="card-body">
+                                        <p class="text-muted mb-3">For failed/repeat cases, search by <strong>Roll No / Name / Email</strong> and re-enroll from a dedicated page.</p>
+                                        <a href="re_enroll.php" class="btn btn-outline-primary">
+                                            <i class="fas fa-search me-1"></i>Open Re-enroll Search
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-6 mb-4">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header"><h5 class="mb-0">Import Students from Excel/CSV</h5></div>
+                                    <div class="card-body">
+                                        <p class="text-muted mb-3">Headers: <strong>email, name, password, roll_no, session, department, semester_no</strong></p>
+                                        <form method="POST" action="" enctype="multipart/form-data">
+                                            <div class="row g-3 align-items-end">
+                                                <div class="col-md-12">
+                                                    <label for="student_excel" class="form-label">Excel/CSV File (.xlsx, .csv, .ods)</label>
+                                                    <input type="file" class="form-control" id="student_excel" name="student_excel" accept=".xlsx,.csv,.ods" required>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <button type="submit" name="import_students" class="btn btn-primary w-100">
+                                                        <i class="fas fa-file-import me-1"></i>Import Students
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12 mb-4">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header"><h5 class="mb-0">Group Enroll Students (Batch)</h5></div>
+                                    <div class="card-body">
+                                        <form method="POST" action="">
+                                            <div class="row g-3">
+                                                <div class="col-md-3">
+                                                    <label for="group_department" class="form-label">Department</label>
+                                                    <select class="form-select" id="group_department" name="group_department" required>
+                                                        <option value="">Select Department</option>
+                                                        <?php foreach ($groupDepartments as $department): ?>
+                                                            <option value="<?php echo htmlspecialchars($department); ?>"><?php echo htmlspecialchars($department); ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label for="group_session" class="form-label">Session</label>
+                                                    <select class="form-select" id="group_session" name="group_session" required>
+                                                        <option value="">Select Session</option>
+                                                        <?php foreach ($groupSessions as $sessionValue): ?>
+                                                            <option value="<?php echo htmlspecialchars($sessionValue); ?>"><?php echo htmlspecialchars($sessionValue); ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label for="group_semester_no" class="form-label">Semester</label>
+                                                    <select class="form-select" id="group_semester_no" name="group_semester_no" required>
+                                                        <option value="">Select</option>
+                                                        <?php foreach ($groupSemesters as $semesterValue): ?>
+                                                            <option value="<?php echo (int)$semesterValue; ?>"><?php echo (int)$semesterValue; ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label for="group_enroll_course_id" class="form-label">Course</label>
+                                                    <select class="form-select" id="group_enroll_course_id" name="group_enroll_course_id" required>
+                                                        <option value="">Select Course</option>
+                                                        <?php foreach ($enrollableCourses as $course): ?>
+                                                            <option value="<?php echo (int)$course['course_id']; ?>">
+                                                                <?php echo htmlspecialchars($course['course_code']); ?> - <?php echo htmlspecialchars($course['course_title']); ?>
+                                                                (Sem <?php echo (int)$course['semester_no']; ?>)
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                    <?php if (empty($enrollableCourses)): ?>
+                                                        <small class="text-muted d-block mt-1">No courses available. Assign a teacher first.</small>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                            <div class="mt-3">
+                                                <button type="submit" name="enroll_student_group" class="btn btn-success">
+                                                    <i class="fas fa-users me-1"></i>Enroll Group
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-12 mb-4">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header"><h5 class="mb-0">Recent Student Enrollments</h5></div>
+                                    <div class="card-body">
+                                        <?php if (empty($recentEnrollments)): ?>
+                                            <p class="text-muted mb-0">No enrollments yet.</p>
+                                        <?php else: ?>
+                                            <ul class="list-group list-group-flush">
+                                                <?php foreach ($recentEnrollments as $item): ?>
+                                                    <li class="list-group-item px-0">
+                                                        <strong><?php echo htmlspecialchars($item['student_name']); ?></strong>
+                                                        → <?php echo htmlspecialchars($item['course_code']); ?>
+                                                        <br>
+                                                        <small class="text-muted">
+                                                            <?php echo date('M d, Y h:i A', strtotime($item['enrolled_at'])); ?>
+                                                        </small>
+                                                    </li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="teachers-section" class="mb-5">
+                        <h4 class="mb-3"><i class="fas fa-chalkboard-teacher me-2"></i>Teachers</h4>
+                        <div class="row">
+                            <div class="col-lg-6 mb-4">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header"><h5 class="mb-0">Import Teachers from Excel/CSV</h5></div>
+                                    <div class="card-body">
+                                        <p class="text-muted mb-3">Headers: <strong>email, name, password, department</strong></p>
+                                        <form method="POST" action="" enctype="multipart/form-data">
+                                            <div class="row g-3 align-items-end">
+                                                <div class="col-md-12">
+                                                    <label for="teacher_excel" class="form-label">Excel/CSV File (.xlsx, .csv, .ods)</label>
+                                                    <input type="file" class="form-control" id="teacher_excel" name="teacher_excel" accept=".xlsx,.csv,.ods" required>
+                                                </div>
+                                                <div class="col-md-12">
+                                                    <button type="submit" name="import_teachers" class="btn btn-primary w-100">
+                                                        <i class="fas fa-file-import me-1"></i>Import Teachers
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-6 mb-4">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-header"><h5 class="mb-0">Teachers in System</h5></div>
+                                    <div class="card-body">
+                                        <?php if (empty($teachers)): ?>
+                                            <p class="text-muted mb-0">No teachers found.</p>
+                                        <?php else: ?>
+                                            <ul class="list-group list-group-flush">
+                                                <?php foreach (array_slice($teachers, 0, 15) as $teacher): ?>
+                                                    <li class="list-group-item px-0 d-flex justify-content-between">
+                                                        <span><?php echo htmlspecialchars($teacher['name']); ?></span>
+                                                        <small class="text-muted"><?php echo htmlspecialchars($teacher['department']); ?></small>
+                                                    </li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="courses-section" class="mb-4">
+                        <h4 class="mb-3"><i class="fas fa-book me-2"></i>Courses</h4>
+                        <div class="row">
+                            <div class="col-lg-6 mb-4">
                             <div class="card shadow-sm h-100">
                                 <div class="card-header"><h5 class="mb-0">Assign Course to Teacher</h5></div>
                                 <div class="card-body">
@@ -273,44 +1281,29 @@ if ($countResult) {
                             </div>
                         </div>
 
-                        <div class="col-lg-6 mb-4">
+                            <div class="col-lg-6 mb-4">
                             <div class="card shadow-sm h-100">
-                                <div class="card-header"><h5 class="mb-0">Enroll Student in Course</h5></div>
+                                <div class="card-header"><h5 class="mb-0">Import Courses from Excel/CSV</h5></div>
                                 <div class="card-body">
-                                    <form method="POST" action="">
-                                        <div class="mb-3">
-                                            <label for="student_id" class="form-label">Student</label>
-                                            <select class="form-select" id="student_id" name="student_id" required>
-                                                <option value="">Select Student</option>
-                                                <?php foreach ($students as $student): ?>
-                                                    <option value="<?php echo (int)$student['student_id']; ?>">
-                                                        <?php echo htmlspecialchars($student['name']); ?> (<?php echo htmlspecialchars($student['Roll_no']); ?>)
-                                                        - Sem <?php echo (int)$student['semester_no']; ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
+                                    <p class="text-muted mb-3">Headers: <strong>course_code, course_title, department, semester_no</strong> (+ optional <strong>credit_hours</strong>)</p>
+                                    <form method="POST" action="" enctype="multipart/form-data">
+                                        <div class="row g-3 align-items-end">
+                                            <div class="col-md-12">
+                                                <label for="course_excel" class="form-label">Excel/CSV File (.xlsx, .csv, .ods)</label>
+                                                <input type="file" class="form-control" id="course_excel" name="course_excel" accept=".xlsx,.csv,.ods" required>
+                                            </div>
+                                            <div class="col-md-12">
+                                                <button type="submit" name="import_courses" class="btn btn-primary w-100">
+                                                    <i class="fas fa-file-import me-1"></i>Import Courses
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div class="mb-3">
-                                            <label for="enroll_course_id" class="form-label">Course</label>
-                                            <select class="form-select" id="enroll_course_id" name="enroll_course_id" required>
-                                                <option value="">Select Course</option>
-                                                <?php foreach ($courses as $course): ?>
-                                                    <option value="<?php echo (int)$course['course_id']; ?>">
-                                                        <?php echo htmlspecialchars($course['course_code']); ?> - <?php echo htmlspecialchars($course['course_title']); ?>
-                                                        (Sem <?php echo (int)$course['semester_no']; ?>)
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-                                        <button type="submit" name="enroll_student" class="btn btn-success">Enroll Student</button>
                                     </form>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div class="row">
-                        <div class="col-lg-6 mb-4">
+                            <div class="col-12 mb-4">
                             <div class="card shadow-sm h-100">
                                 <div class="card-header"><h5 class="mb-0">Recent Teacher Assignments</h5></div>
                                 <div class="card-body">
@@ -333,31 +1326,8 @@ if ($countResult) {
                                 </div>
                             </div>
                         </div>
-
-                        <div class="col-lg-6 mb-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-header"><h5 class="mb-0">Recent Student Enrollments</h5></div>
-                                <div class="card-body">
-                                    <?php if (empty($recentEnrollments)): ?>
-                                        <p class="text-muted mb-0">No enrollments yet.</p>
-                                    <?php else: ?>
-                                        <ul class="list-group list-group-flush">
-                                            <?php foreach ($recentEnrollments as $item): ?>
-                                                <li class="list-group-item px-0">
-                                                    <strong><?php echo htmlspecialchars($item['student_name']); ?></strong>
-                                                    → <?php echo htmlspecialchars($item['course_code']); ?>
-                                                    <br>
-                                                    <small class="text-muted">
-                                                        <?php echo date('M d, Y h:i A', strtotime($item['enrolled_at'])); ?>
-                                                    </small>
-                                                </li>
-                                            <?php endforeach; ?>
-                                        </ul>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
                         </div>
-                    </div>
+                    </section>
                 </div>
             </main>
         </div>

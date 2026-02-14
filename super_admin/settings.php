@@ -10,6 +10,19 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin')
 $password_error = '';
 $password_success = '';
 
+$adminId = (int)$_SESSION['user_id'];
+$adminDepartment = '';
+$adminProfileStmt = $conn->prepare("SELECT department FROM super_admin WHERE super_admin_id = ?");
+$adminProfileStmt->bind_param("i", $adminId);
+$adminProfileStmt->execute();
+$adminProfileResult = $adminProfileStmt->get_result();
+$adminProfile = $adminProfileResult ? $adminProfileResult->fetch_assoc() : null;
+$adminProfileStmt->close();
+
+if ($adminProfile && !empty($adminProfile['department'])) {
+    $adminDepartment = trim((string)$adminProfile['department']);
+}
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
     $currentPassword = $_POST['currentPassword'] ?? '';
     $newPassword = $_POST['newPassword'] ?? '';
@@ -47,11 +60,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
     }
 }
 
-$countResult = $conn->query("SELECT
-    (SELECT COUNT(*) FROM courses WHERE is_active = 1) AS courses,
-    (SELECT COUNT(*) FROM teacher_course_assignments) AS assignments,
-    (SELECT COUNT(*) FROM student_course_enrollments WHERE status = 'active') AS enrollments");
+$countStmt = $conn->prepare("SELECT
+    (SELECT COUNT(*) FROM courses WHERE LOWER(TRIM(department)) = LOWER(TRIM(?))) AS courses,
+    (SELECT COUNT(*)
+        FROM teacher_course_assignments tca
+        INNER JOIN teacher t ON t.teacher_id = tca.teacher_id
+        WHERE LOWER(TRIM(t.department)) = LOWER(TRIM(?))) AS assignments,
+    (SELECT COUNT(*)
+        FROM student_course_enrollments sce
+        INNER JOIN student s ON s.student_id = sce.student_id
+        WHERE sce.status = 'active' AND LOWER(TRIM(s.department)) = LOWER(TRIM(?))) AS enrollments");
+$countStmt->bind_param("sss", $adminDepartment, $adminDepartment, $adminDepartment);
+$countStmt->execute();
+$countResult = $countStmt->get_result();
 $counts = $countResult ? $countResult->fetch_assoc() : ['courses' => 0, 'assignments' => 0, 'enrollments' => 0];
+$countStmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -87,7 +110,7 @@ $counts = $countResult ? $countResult->fetch_assoc() : ['courses' => 0, 'assignm
             <div class="d-flex text-white gap-3 flex-wrap justify-content-center">
                 <span><strong>Super Admin:</strong> <?php echo htmlspecialchars($_SESSION['super_admin_name'] ?? 'Admin'); ?></span>
                 <span>|</span>
-                <span><strong>Active Courses:</strong> <?php echo (int)$counts['courses']; ?></span>
+                <span><strong>Department:</strong> <?php echo htmlspecialchars($adminDepartment ?: 'Not Set'); ?></span>
             </div>
         </div>
     </nav>
@@ -112,6 +135,7 @@ $counts = $countResult ? $countResult->fetch_assoc() : ['courses' => 0, 'assignm
                     <h4 class="mb-4"><a href="dashboard.php" class="text-white text-decoration-none">Super Admin Panel</a></h4>
                     <nav class="nav flex-column">
                         <a class="nav-link text-white mb-2" href="dashboard.php"><i class="fas fa-gauge me-2"></i>Dashboard</a>
+                        <a class="nav-link text-white mb-2" href="re_enroll.php"><i class="fas fa-search me-2"></i>Re-enroll Search</a>
                         <a class="nav-link text-white active bg-secondary rounded mb-2" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a>
                         <button class="nav-link btn btn-link text-white text-start mb-2" id="logout-btn"><i class="fas fa-sign-out-alt me-2"></i>Log out</button>
                     </nav>
