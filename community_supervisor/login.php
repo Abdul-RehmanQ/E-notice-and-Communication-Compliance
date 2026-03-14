@@ -7,30 +7,31 @@ $error = '';
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $email = trim($_POST['email']);
     $password = $_POST['password'];
-    
+
     // Join community_supervisor and user tables to get credentials
-    $stmt = $conn->prepare("SELECT cs.supervisor_id, cs.name, u.user_id, u.password 
+    $stmt = $conn->prepare("SELECT cs.supervisor_id, cs.name, cs.department, u.user_id, u.password 
                             FROM community_supervisor cs 
                             INNER JOIN user u ON cs.supervisor_id = u.user_id 
                             WHERE u.email = ? AND u.role = 'community_supervisor'");
     $stmt->bind_param("s", $email);
     $stmt->execute();
     $result = $stmt->get_result();
-    
+
     if ($result->num_rows == 1) {
         $supervisor = $result->fetch_assoc();
         $passwordValid = verifyPasswordArgon2id($password, $supervisor['password']);
-        
+
         if ($passwordValid) {
             // Update login_time
             $updateStmt = $conn->prepare("UPDATE user SET login_time = NOW() WHERE user_id = ?");
             $updateStmt->bind_param("i", $supervisor['user_id']);
             $updateStmt->execute();
             $updateStmt->close();
-            
+
             $_SESSION['user_id'] = $supervisor['user_id'];
             $_SESSION['supervisor_id'] = $supervisor['supervisor_id'];
             $_SESSION['supervisor_name'] = $supervisor['name'];
+            $_SESSION['supervisor_department'] = $supervisor['department'];
             $_SESSION['role'] = 'community_supervisor';
             header("Location: dashboard.php");
             exit();
@@ -98,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         const passwordInput = document.getElementById('password');
         const togglePasswordBtn = document.getElementById('togglePassword');
 
-        togglePasswordBtn.addEventListener('click', function () {
+        togglePasswordBtn.addEventListener('click', function() {
             const isPassword = passwordInput.type === 'password';
             passwordInput.type = isPassword ? 'text' : 'password';
             togglePasswordBtn.textContent = isPassword ? 'Hide' : 'Show';

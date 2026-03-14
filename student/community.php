@@ -9,6 +9,30 @@ $studentUserId = (int)$studentIdentity['user_id'];
 $error = '';
 $success = '';
 
+// Flash messages from PRG redirect
+if (isset($_SESSION['student_community_flash']) && is_array($_SESSION['student_community_flash'])) {
+    $flashType = $_SESSION['student_community_flash']['type'] ?? '';
+    $flashMessage = $_SESSION['student_community_flash']['message'] ?? '';
+    if ($flashType === 'success') {
+        $success = (string)$flashMessage;
+    } elseif ($flashType === 'error') {
+        $error = (string)$flashMessage;
+    }
+    unset($_SESSION['student_community_flash']);
+}
+
+if (!function_exists('studentCommunityRedirectWithFlash')) {
+    function studentCommunityRedirectWithFlash(string $type, string $message): void
+    {
+        $_SESSION['student_community_flash'] = [
+            'type' => $type,
+            'message' => $message,
+        ];
+        header('Location: community.php');
+        exit();
+    }
+}
+
 // Delete expired posts
 $conn->query("DELETE FROM posts WHERE expires_at < NOW()");
 
@@ -19,9 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_post'])) {
     $stmt = $conn->prepare("DELETE FROM posts WHERE post_id = ? AND user_id = ?");
     $stmt->bind_param("ii", $postId, $studentUserId);
     if ($stmt->execute() && $stmt->affected_rows > 0) {
-        $success = "Post deleted successfully!";
+        studentCommunityRedirectWithFlash('success', 'Post deleted successfully!');
     } else {
-        $error = "Failed to delete post or post not found.";
+        studentCommunityRedirectWithFlash('error', 'Failed to delete post or post not found.');
     }
     $stmt->close();
 }
@@ -33,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_post'])) {
     $expiresIn = (int)($_POST['expires_in'] ?? 15);
     $includeText = isset($_POST['include_text']);
     $includeImage = isset($_POST['include_image']);
-    
+
     // Validate
     if (!$includeText && !$includeImage) {
         $error = "Please select at least one content type.";
@@ -45,12 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_post'])) {
         $imageData = null;
         $imageType = null;
         $imageSize = null;
-        
+
         // Handle image upload
         if ($includeImage && isset($_FILES['postImage']) && $_FILES['postImage']['error'] == UPLOAD_ERR_OK) {
             $maxSize = 2 * 1024 * 1024; // 2MB
             $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-            
+
             if ($_FILES['postImage']['size'] > $maxSize) {
                 $error = "Image must be under 2MB.";
             } elseif (!in_array($_FILES['postImage']['type'], $allowedTypes)) {
@@ -61,21 +85,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_post'])) {
                 $imageSize = $_FILES['postImage']['size'];
             }
         }
-        
+
         if (empty($error)) {
             $expiresAt = date('Y-m-d H:i:s', strtotime("+$expiresIn days"));
             $userId = $studentUserId;
-            
+
             $stmt = $conn->prepare("INSERT INTO posts (user_id, content, image_data, image_type, image_size, scope, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $stmt->bind_param("isssiss", $userId, $content, $imageData, $imageType, $imageSize, $scope, $expiresAt);
-            
+
             if ($stmt->execute()) {
-                $success = "Post created successfully! It will expire in $expiresIn days.";
+                studentCommunityRedirectWithFlash('success', "Post created successfully! It will expire in $expiresIn days.");
             } else {
                 $error = "Failed to create post: " . $conn->error;
             }
             $stmt->close();
         }
+    }
+
+    // If we reach here with an error, redirect with flash
+    if ($error !== '') {
+        studentCommunityRedirectWithFlash('error', $error);
     }
 }
 
@@ -87,23 +116,24 @@ $result = $stmt->get_result();
 $student = $result->fetch_assoc();
 $stmt->close();
 
-$studentDepartment = $student['department'];
+$studentDepartment = trim((string)($student['department'] ?? ''));
+$studentDepartmentNormalized = mb_strtolower($studentDepartment);
 
 // Fetch posts: Only APPROVED posts - All university posts OR department-only posts from same department
 $posts = [];
 $stmt = $conn->prepare("SELECT p.*, u.email, 
                         COALESCE(s.name, t.name) as poster_name,
                         s.Roll_no as poster_roll,
-                        s.department as poster_department
+                        COALESCE(s.department, t.department) as poster_department
                         FROM posts p 
                         LEFT JOIN user u ON p.user_id = u.user_id 
                         LEFT JOIN student s ON p.user_id = s.student_id
                         LEFT JOIN teacher t ON p.user_id = t.teacher_id
                         WHERE p.expires_at > NOW() 
                         AND p.status = 'approved'
-                        AND (p.scope = 'all' OR (p.scope = 'department' AND s.department = ?))
+                        AND (p.scope = 'all' OR (p.scope = 'department' AND (LOWER(TRIM(s.department)) = ? OR LOWER(TRIM(t.department)) = ?)))
                         ORDER BY p.created_at DESC");
-$stmt->bind_param("s", $studentDepartment);
+$stmt->bind_param("ss", $studentDepartmentNormalized, $studentDepartmentNormalized);
 $stmt->execute();
 $result = $stmt->get_result();
 if ($result) {
@@ -242,7 +272,7 @@ $stmt->close();
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
                     <?php endif; ?>
-                    
+
                     <?php if ($success): ?>
                         <div class="alert alert-success alert-dismissible fade show" role="alert">
                             <?php echo htmlspecialchars($success); ?>
@@ -280,7 +310,7 @@ $stmt->close();
                                                 <option value="" selected disabled>-- Choose a post --</option>
                                                 <?php foreach ($userPosts as $userPost): ?>
                                                     <option value="<?php echo $userPost['post_id']; ?>">
-                                                        <?php 
+                                                        <?php
                                                         $preview = !empty($userPost['content']) ? substr($userPost['content'], 0, 50) : '[Image Post]';
                                                         echo htmlspecialchars($preview) . (strlen($userPost['content']) > 50 ? '...' : '');
                                                         ?>
@@ -424,14 +454,14 @@ $stmt->close();
                                                     <?php if (!empty($post['content'])): ?>
                                                         <p class="mb-2"><?php echo nl2br(htmlspecialchars($post['content'])); ?></p>
                                                     <?php endif; ?>
-                                                    
+
                                                     <?php if (!empty($post['image_data'])): ?>
                                                         <div class="mb-2">
-                                                            <img src="data:<?php echo $post['image_type']; ?>;base64,<?php echo base64_encode($post['image_data']); ?>" 
-                                                                 class="img-fluid rounded" style="max-height: 300px;">
+                                                            <img src="data:<?php echo $post['image_type']; ?>;base64,<?php echo base64_encode($post['image_data']); ?>"
+                                                                class="img-fluid rounded" style="max-height: 300px;">
                                                         </div>
                                                     <?php endif; ?>
-                                                    
+
                                                     <div class="d-flex flex-wrap justify-content-between align-items-center mt-2">
                                                         <small class="text-muted">
                                                             <i class="fas fa-user me-1"></i>
@@ -451,7 +481,7 @@ $stmt->close();
                                                             <?php echo date('M d, Y h:i A', strtotime($post['created_at'])); ?>
                                                         </small>
                                                         <small>
-                                                            <?php 
+                                                            <?php
                                                             $daysLeft = ceil((strtotime($post['expires_at']) - time()) / 86400);
                                                             $badgeClass = $daysLeft <= 3 ? 'bg-warning text-dark' : 'bg-secondary';
                                                             ?>
@@ -482,7 +512,7 @@ $stmt->close();
                                             <?php foreach ($userPosts as $userPost): ?>
                                                 <li class="list-group-item">
                                                     <small class="text-muted"><?php echo date('M d', strtotime($userPost['created_at'])); ?>:</small>
-                                                    <?php 
+                                                    <?php
                                                     $preview = !empty($userPost['content']) ? substr($userPost['content'], 0, 40) : '[Image Post]';
                                                     echo htmlspecialchars($preview) . (strlen($userPost['content']) > 40 ? '...' : '');
                                                     ?>
@@ -506,7 +536,7 @@ $stmt->close();
         });
 
         // Toggle text section visibility
-        document.getElementById('includeText').addEventListener('change', function () {
+        document.getElementById('includeText').addEventListener('change', function() {
             const textSection = document.getElementById('textSection');
             if (this.checked) {
                 textSection.classList.remove('d-none');
@@ -516,7 +546,7 @@ $stmt->close();
         });
 
         // Toggle image section visibility
-        document.getElementById('includeImage').addEventListener('change', function () {
+        document.getElementById('includeImage').addEventListener('change', function() {
             const imageSection = document.getElementById('imageSection');
             if (this.checked) {
                 imageSection.classList.remove('d-none');
@@ -529,7 +559,7 @@ $stmt->close();
         });
 
         // Image preview functionality
-        document.getElementById('postImage').addEventListener('change', function (e) {
+        document.getElementById('postImage').addEventListener('change', function(e) {
             const file = e.target.files[0];
             const imagePreview = document.getElementById('imagePreview');
             const previewImg = imagePreview.querySelector('img');
@@ -550,7 +580,7 @@ $stmt->close();
                 }
 
                 const reader = new FileReader();
-                reader.onload = function (e) {
+                reader.onload = function(e) {
                     previewImg.src = e.target.result;
                     imagePreview.classList.remove('d-none');
                 };
@@ -561,7 +591,7 @@ $stmt->close();
         });
 
         // Remove image button
-        document.getElementById('removeImage').addEventListener('click', function () {
+        document.getElementById('removeImage').addEventListener('click', function() {
             document.getElementById('postImage').value = '';
             document.getElementById('imagePreview').classList.add('d-none');
         });
@@ -593,7 +623,7 @@ $stmt->close();
         });
 
         // Reset form when modal is closed
-        document.getElementById('addPostModal').addEventListener('hidden.bs.modal', function () {
+        document.getElementById('addPostModal').addEventListener('hidden.bs.modal', function() {
             document.getElementById('addPostForm').reset();
             document.getElementById('imagePreview').classList.add('d-none');
             document.getElementById('imageSection').classList.add('d-none');
@@ -613,7 +643,7 @@ $stmt->close();
         });
 
         // Reset delete modal when closed
-        document.getElementById('deletePostModal').addEventListener('hidden.bs.modal', function () {
+        document.getElementById('deletePostModal').addEventListener('hidden.bs.modal', function() {
             document.getElementById('selectPostToDelete').value = '';
             document.getElementById('deleteConfirmSection').classList.add('d-none');
         });

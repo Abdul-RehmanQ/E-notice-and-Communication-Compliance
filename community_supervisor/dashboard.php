@@ -5,94 +5,216 @@ require_once __DIR__ . '/supervisor_guard.php';
 
 $supervisor = requireSupervisorIdentity($conn);
 $supervisorId = (int)$supervisor['supervisor_id'];
+$supervisorDepartment = trim((string)($supervisor['department'] ?? ''));
+$supervisorDepartmentNormalized = mb_strtolower($supervisorDepartment);
 
 $success = '';
 $error = '';
+
+// Flash messages from PRG redirect
+if (isset($_SESSION['supervisor_flash']) && is_array($_SESSION['supervisor_flash'])) {
+    $flashType = $_SESSION['supervisor_flash']['type'] ?? '';
+    $flashMessage = $_SESSION['supervisor_flash']['message'] ?? '';
+    if ($flashType === 'success') {
+        $success = (string)$flashMessage;
+    } elseif ($flashType === 'error') {
+        $error = (string)$flashMessage;
+    }
+    unset($_SESSION['supervisor_flash']);
+}
+
+if (!function_exists('supervisorRedirectWithFlash')) {
+    function supervisorRedirectWithFlash(string $type, string $message): void
+    {
+        $_SESSION['supervisor_flash'] = [
+            'type' => $type,
+            'message' => $message,
+        ];
+        header('Location: dashboard.php');
+        exit();
+    }
+}
 
 // Delete expired posts
 $conn->query("DELETE FROM posts WHERE expires_at < NOW()");
 
 // Handle post approval
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['approve_post'])) {
+    if ($supervisorDepartment === '') {
+        supervisorRedirectWithFlash('error', 'Your department profile is missing. Contact super admin.');
+    }
+
     $postId = (int)$_POST['post_id'];
-    
-    $stmt = $conn->prepare("UPDATE posts SET status = 'approved' WHERE post_id = ?");
-    $stmt->bind_param("i", $postId);
-    if ($stmt->execute()) {
+
+    // Verify the post exists and belongs to supervisor's department
+    $checkStmt = $conn->prepare("SELECT p.post_id
+                                 FROM posts p
+                                 LEFT JOIN student s ON p.user_id = s.student_id
+                                 LEFT JOIN teacher t ON p.user_id = t.teacher_id
+                                 WHERE p.post_id = ?
+                                   AND p.status = 'pending'
+                                   AND p.expires_at > NOW()
+                                                                     AND COALESCE(NULLIF(LOWER(TRIM(s.department)), ''), NULLIF(LOWER(TRIM(t.department)), '')) = ?
+                                 LIMIT 1");
+    $checkStmt->bind_param("is", $postId, $supervisorDepartmentNormalized);
+    $checkStmt->execute();
+    $checkResult = $checkStmt->get_result();
+    $postExists = $checkResult && $checkResult->num_rows > 0;
+    $checkStmt->close();
+
+    if (!$postExists) {
+        supervisorRedirectWithFlash('error', 'Post not found, expired, or outside your department.');
+    }
+
+    $stmt = $conn->prepare("UPDATE posts p
+                            LEFT JOIN student s ON p.user_id = s.student_id
+                            LEFT JOIN teacher t ON p.user_id = t.teacher_id
+                            SET p.status = 'approved'
+                            WHERE p.post_id = ?
+                              AND p.status = 'pending'
+                              AND p.expires_at > NOW()
+                                                            AND COALESCE(NULLIF(LOWER(TRIM(s.department)), ''), NULLIF(LOWER(TRIM(t.department)), '')) = ?");
+    $stmt->bind_param("is", $postId, $supervisorDepartmentNormalized);
+    if ($stmt->execute() && $stmt->affected_rows > 0) {
         // Log the review
         $logStmt = $conn->prepare("INSERT INTO post_reviews (post_id, supervisor_id, action) VALUES (?, ?, 'approved')");
         $logStmt->bind_param("ii", $postId, $supervisorId);
         $logStmt->execute();
         $logStmt->close();
-        
-        $success = "Post approved successfully!";
+
+        supervisorRedirectWithFlash('success', 'Post approved successfully!');
     } else {
-        $error = "Failed to approve post.";
+        supervisorRedirectWithFlash('error', 'Failed to approve post.');
     }
     $stmt->close();
 }
 
 // Handle post rejection
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['reject_post'])) {
+    if ($supervisorDepartment === '') {
+        supervisorRedirectWithFlash('error', 'Your department profile is missing. Contact super admin.');
+    }
+
     $postId = (int)$_POST['post_id'];
     $reason = trim($_POST['rejection_reason'] ?? '');
-    
-    // Log the review first
+
+    // Verify the post exists and belongs to supervisor's department before trying to log + delete
+    $checkStmt = $conn->prepare("SELECT p.post_id
+                                 FROM posts p
+                                 LEFT JOIN student s ON p.user_id = s.student_id
+                                 LEFT JOIN teacher t ON p.user_id = t.teacher_id
+                                 WHERE p.post_id = ?
+                                   AND p.status = 'pending'
+                                   AND p.expires_at > NOW()
+                                                                     AND COALESCE(NULLIF(LOWER(TRIM(s.department)), ''), NULLIF(LOWER(TRIM(t.department)), '')) = ?
+                                 LIMIT 1");
+    $checkStmt->bind_param("is", $postId, $supervisorDepartmentNormalized);
+    $checkStmt->execute();
+    $checkResult = $checkStmt->get_result();
+    $postExists = $checkResult && $checkResult->num_rows > 0;
+    $checkStmt->close();
+
+    if (!$postExists) {
+        supervisorRedirectWithFlash('error', 'Post not found, expired, or outside your department.');
+    }
+
+    // Log the review first (post still exists so FK is valid)
     $logStmt = $conn->prepare("INSERT INTO post_reviews (post_id, supervisor_id, action, rejection_reason) VALUES (?, ?, 'rejected', ?)");
     $logStmt->bind_param("iis", $postId, $supervisorId, $reason);
     $logStmt->execute();
     $logStmt->close();
-    
-    // Delete the rejected post
-    $stmt = $conn->prepare("DELETE FROM posts WHERE post_id = ?");
-    $stmt->bind_param("i", $postId);
+
+    // Delete the rejected post (ON DELETE CASCADE will also remove the review log)
+    $stmt = $conn->prepare("DELETE p FROM posts p
+                            LEFT JOIN student s ON p.user_id = s.student_id
+                            LEFT JOIN teacher t ON p.user_id = t.teacher_id
+                            WHERE p.post_id = ?
+                              AND p.status = 'pending'
+                                                            AND COALESCE(NULLIF(LOWER(TRIM(s.department)), ''), NULLIF(LOWER(TRIM(t.department)), '')) = ?");
+    $stmt->bind_param("is", $postId, $supervisorDepartmentNormalized);
     if ($stmt->execute()) {
-        $success = "Post rejected and deleted.";
+        supervisorRedirectWithFlash('success', 'Post rejected and deleted.');
     } else {
-        $error = "Failed to reject post.";
+        supervisorRedirectWithFlash('error', 'Failed to reject post.');
     }
     $stmt->close();
 }
 
 // Fetch pending posts
 $pendingPosts = [];
-$result = $conn->query("SELECT p.*, u.email, 
-                        COALESCE(s.name, t.name) as poster_name,
-                        s.Roll_no as poster_roll,
-                        s.department as poster_department
-                        FROM posts p 
-                        LEFT JOIN user u ON p.user_id = u.user_id 
-                        LEFT JOIN student s ON p.user_id = s.student_id
-                        LEFT JOIN teacher t ON p.user_id = t.teacher_id
-                        WHERE p.status = 'pending' AND p.expires_at > NOW()
-                        ORDER BY p.created_at ASC");
-if ($result) {
-    while ($row = $result->fetch_assoc()) {
+$pendingStmt = $conn->prepare("SELECT p.*, u.email,
+                               COALESCE(s.name, t.name) as poster_name,
+                               s.Roll_no as poster_roll,
+                               COALESCE(NULLIF(TRIM(s.department), ''), NULLIF(TRIM(t.department), '')) as poster_department
+                               FROM posts p
+                               LEFT JOIN user u ON p.user_id = u.user_id
+                               LEFT JOIN student s ON p.user_id = s.student_id
+                               LEFT JOIN teacher t ON p.user_id = t.teacher_id
+                               WHERE p.status = 'pending'
+                                 AND p.expires_at > NOW()
+                                                                 AND COALESCE(NULLIF(LOWER(TRIM(s.department)), ''), NULLIF(LOWER(TRIM(t.department)), '')) = ?
+                               ORDER BY p.created_at ASC");
+$pendingStmt->bind_param("s", $supervisorDepartmentNormalized);
+$pendingStmt->execute();
+$pendingResult = $pendingStmt->get_result();
+if ($pendingResult) {
+    while ($row = $pendingResult->fetch_assoc()) {
         $pendingPosts[] = $row;
     }
 }
+$pendingStmt->close();
 
 // Fetch recent reviews (last 20)
 $recentReviews = [];
-$result = $conn->query("SELECT pr.*, p.content as post_content, 
-                        COALESCE(s.name, t.name) as poster_name
-                        FROM post_reviews pr 
-                        LEFT JOIN posts p ON pr.post_id = p.post_id
-                        LEFT JOIN student s ON p.user_id = s.student_id
-                        LEFT JOIN teacher t ON p.user_id = t.teacher_id
-                        ORDER BY pr.reviewed_at DESC LIMIT 20");
-if ($result) {
-    while ($row = $result->fetch_assoc()) {
+$reviewStmt = $conn->prepare("SELECT pr.*, p.content as post_content,
+                              COALESCE(s.name, t.name) as poster_name
+                              FROM post_reviews pr
+                              LEFT JOIN posts p ON pr.post_id = p.post_id
+                              LEFT JOIN student s ON p.user_id = s.student_id
+                              LEFT JOIN teacher t ON p.user_id = t.teacher_id
+                              WHERE pr.supervisor_id = ?
+                              ORDER BY pr.reviewed_at DESC
+                              LIMIT 20");
+$reviewStmt->bind_param("i", $supervisorId);
+$reviewStmt->execute();
+$reviewResult = $reviewStmt->get_result();
+if ($reviewResult) {
+    while ($row = $reviewResult->fetch_assoc()) {
         $recentReviews[] = $row;
     }
 }
+$reviewStmt->close();
 
 // Count stats
-$statsResult = $conn->query("SELECT 
-    (SELECT COUNT(*) FROM posts WHERE status = 'pending' AND expires_at > NOW()) as pending_count,
-    (SELECT COUNT(*) FROM post_reviews WHERE action = 'approved' AND DATE(reviewed_at) = CURDATE()) as approved_today,
-    (SELECT COUNT(*) FROM post_reviews WHERE action = 'rejected' AND DATE(reviewed_at) = CURDATE()) as rejected_today");
+$statsStmt = $conn->prepare("SELECT
+    (
+        SELECT COUNT(*)
+        FROM posts p
+        LEFT JOIN student s ON p.user_id = s.student_id
+        LEFT JOIN teacher t ON p.user_id = t.teacher_id
+        WHERE p.status = 'pending'
+          AND p.expires_at > NOW()
+                    AND COALESCE(NULLIF(LOWER(TRIM(s.department)), ''), NULLIF(LOWER(TRIM(t.department)), '')) = ?
+    ) as pending_count,
+    (
+        SELECT COUNT(*)
+        FROM post_reviews
+        WHERE supervisor_id = ?
+          AND action = 'approved'
+          AND DATE(reviewed_at) = CURDATE()
+    ) as approved_today,
+    (
+        SELECT COUNT(*)
+        FROM post_reviews
+        WHERE supervisor_id = ?
+          AND action = 'rejected'
+          AND DATE(reviewed_at) = CURDATE()
+    ) as rejected_today");
+$statsStmt->bind_param("sii", $supervisorDepartmentNormalized, $supervisorId, $supervisorId);
+$statsStmt->execute();
+$statsResult = $statsStmt->get_result();
 $stats = $statsResult->fetch_assoc();
+$statsStmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -135,6 +257,8 @@ $stats = $statsResult->fetch_assoc();
         <div class="container-fluid justify-content-center">
             <div class="d-flex text-white gap-3 flex-wrap justify-content-center">
                 <span><strong>Supervisor:</strong> <?php echo htmlspecialchars($_SESSION['supervisor_name']); ?></span>
+                <span>|</span>
+                <span><strong>Department:</strong> <?php echo htmlspecialchars($supervisorDepartment !== '' ? $supervisorDepartment : 'N/A'); ?></span>
                 <span>|</span>
                 <span><strong>Pending Posts:</strong> <?php echo $stats['pending_count']; ?></span>
             </div>
@@ -183,14 +307,14 @@ $stats = $statsResult->fetch_assoc();
             <main class="col-lg-9 col-xl-10 ms-lg-auto px-md-4">
                 <div class="container py-4">
                     <h2 class="mb-4">Pending Posts for Review</h2>
-                    
+
                     <?php if ($error): ?>
                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
                             <?php echo htmlspecialchars($error); ?>
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         </div>
                     <?php endif; ?>
-                    
+
                     <?php if ($success): ?>
                         <div class="alert alert-success alert-dismissible fade show" role="alert">
                             <?php echo htmlspecialchars($success); ?>
@@ -252,25 +376,25 @@ $stats = $statsResult->fetch_assoc();
                                     <?php if (!empty($post['content'])): ?>
                                         <p class="mb-3"><?php echo nl2br(htmlspecialchars($post['content'])); ?></p>
                                     <?php endif; ?>
-                                    
+
                                     <?php if (!empty($post['image_data'])): ?>
                                         <div class="mb-3">
-                                            <img src="data:<?php echo $post['image_type']; ?>;base64,<?php echo base64_encode($post['image_data']); ?>" 
-                                                 class="img-fluid rounded" style="max-height: 300px;">
+                                            <img src="data:<?php echo $post['image_type']; ?>;base64,<?php echo base64_encode($post['image_data']); ?>"
+                                                class="img-fluid rounded" style="max-height: 300px;">
                                         </div>
                                     <?php endif; ?>
-                                    
+
                                     <div class="d-flex flex-wrap gap-2 text-muted small mb-3">
                                         <span><i class="fas fa-calendar me-1"></i>Submitted: <?php echo date('M d, Y h:i A', strtotime($post['created_at'])); ?></span>
                                         <span>|</span>
                                         <span>
-                                            <?php 
+                                            <?php
                                             $daysLeft = ceil((strtotime($post['expires_at']) - time()) / 86400);
                                             ?>
                                             <i class="fas fa-clock me-1"></i>Expires in <?php echo $daysLeft; ?> days
                                         </span>
                                     </div>
-                                    
+
                                     <div class="d-flex flex-wrap gap-2">
                                         <form method="POST" class="d-inline">
                                             <input type="hidden" name="post_id" value="<?php echo $post['post_id']; ?>">
@@ -278,8 +402,8 @@ $stats = $statsResult->fetch_assoc();
                                                 <i class="fas fa-check me-1"></i>Approve
                                             </button>
                                         </form>
-                                        <button type="button" class="btn btn-danger" data-bs-toggle="modal" 
-                                                data-bs-target="#rejectModal<?php echo $post['post_id']; ?>">
+                                        <button type="button" class="btn btn-danger" data-bs-toggle="modal"
+                                            data-bs-target="#rejectModal<?php echo $post['post_id']; ?>">
                                             <i class="fas fa-times me-1"></i>Reject
                                         </button>
                                     </div>
@@ -300,9 +424,9 @@ $stats = $statsResult->fetch_assoc();
                                                 <p>Are you sure you want to reject this post? It will be permanently deleted.</p>
                                                 <div class="mb-3">
                                                     <label for="reason<?php echo $post['post_id']; ?>" class="form-label">Reason (optional)</label>
-                                                    <textarea class="form-control" id="reason<?php echo $post['post_id']; ?>" 
-                                                              name="rejection_reason" rows="3" 
-                                                              placeholder="Enter reason for rejection..."></textarea>
+                                                    <textarea class="form-control" id="reason<?php echo $post['post_id']; ?>"
+                                                        name="rejection_reason" rows="3"
+                                                        placeholder="Enter reason for rejection..."></textarea>
                                                 </div>
                                             </div>
                                             <div class="modal-footer">
@@ -346,7 +470,7 @@ $stats = $statsResult->fetch_assoc();
                                                         <?php endif; ?>
                                                     </td>
                                                     <td>
-                                                        <?php 
+                                                        <?php
                                                         $preview = !empty($review['post_content']) ? substr($review['post_content'], 0, 40) : '[Image Post]';
                                                         echo htmlspecialchars($preview) . (strlen($review['post_content'] ?? '') > 40 ? '...' : '');
                                                         ?>

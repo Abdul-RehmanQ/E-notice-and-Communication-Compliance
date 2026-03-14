@@ -7,3 +7,26 @@ email_config.local.php
 
 # Dependencies
 vendor/
+node_modules/
+
+# Laravel specific
+storage/*.key
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/testing/*
+storage/framework/views/*
+storage/logs/*.log
+public/storage
+public/hot
+
+# Testing
+.phpunit.result.cache
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Database (Keep the directory, ignore the content if needed)
+# DB/*.sql

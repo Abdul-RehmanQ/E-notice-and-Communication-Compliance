@@ -4,6 +4,82 @@ include '../config.php';
 require_once __DIR__ . '/teacher_guard.php';
 
 $teacher = requireTeacherIdentity($conn);
+$teacherUserId = (int)$teacher['user_id'];
+
+$password_error = '';
+$password_success = '';
+$email_error = '';
+$email_success = '';
+
+// Handle Password Update
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
+    $currentPassword = $_POST['currentPassword'];
+    $newPassword = $_POST['newPassword'];
+    $repeatNewPassword = $_POST['repeatNewPassword'];
+
+    // Fetch current password from DB
+    $stmt = $conn->prepare("SELECT password FROM user WHERE user_id = ? AND role = 'teacher'");
+    $stmt->bind_param("i", $teacherUserId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
+    $stmt->close();
+
+    $passwordValid = verifyPasswordArgon2id($currentPassword, $user['password']);
+
+    if (!$passwordValid) {
+        $password_error = "Current password is incorrect!";
+    } elseif ($newPassword !== $repeatNewPassword) {
+        $password_error = "New passwords do not match!";
+    } elseif (strlen($newPassword) < 6) {
+        $password_error = "Password must be at least 6 characters!";
+    } else {
+        $hashedPassword = hashPasswordArgon2id($newPassword);
+        $updateStmt = $conn->prepare("UPDATE user SET password = ? WHERE user_id = ? AND role = 'teacher'");
+        $updateStmt->bind_param("si", $hashedPassword, $teacherUserId);
+        if ($updateStmt->execute()) {
+            $password_success = "Password updated successfully!";
+        } else {
+            $password_error = "Failed to update password!";
+        }
+        $updateStmt->close();
+    }
+}
+
+// Handle Email Update
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_email'])) {
+    $email = trim($_POST['email']);
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $email_error = "Invalid email format!";
+    } else {
+        // Check if email already exists for another user
+        $checkStmt = $conn->prepare("SELECT user_id FROM user WHERE email = ? AND user_id != ?");
+        $checkStmt->bind_param("si", $email, $teacherUserId);
+        $checkStmt->execute();
+        $checkResult = $checkStmt->get_result();
+
+        if ($checkResult->num_rows > 0) {
+            $email_error = "This email is already in use by another account!";
+        } else {
+            // Update email
+            $updateStmt = $conn->prepare("UPDATE user SET email = ? WHERE user_id = ? AND role = 'teacher'");
+            $updateStmt->bind_param("si", $email, $teacherUserId);
+            if ($updateStmt->execute()) {
+                $email_success = "Email updated successfully!";
+                // Update cached identity
+                $teacher['email'] = $email;
+            } else {
+                $email_error = "Failed to update email!";
+            }
+            $updateStmt->close();
+        }
+        $checkStmt->close();
+    }
+}
+
+// Fetch current email
+$currentEmail = (string)($teacher['email'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -106,48 +182,60 @@ $teacher = requireTeacherIdentity($conn);
                 <div class="container py-4">
                     <h2>Settings</h2>
 
-                    <!-- Update Password -->
+                    <!-- Password Update Section -->
                     <div class="card mb-4 shadow-sm">
                         <div class="card-header">
                             <h5 class="mb-0">Update Password</h5>
                         </div>
                         <div class="card-body">
-                            <form id="password-form">
+                            <?php if ($password_error): ?>
+                                <div class="alert alert-danger"><?php echo $password_error; ?></div>
+                            <?php endif; ?>
+                            <?php if ($password_success): ?>
+                                <div class="alert alert-success"><?php echo $password_success; ?></div>
+                            <?php endif; ?>
+                            <form method="POST" action="">
                                 <div class="mb-3">
                                     <label for="currentPassword" class="form-label">Current Password</label>
-                                    <input type="password" class="form-control" id="currentPassword"
+                                    <input type="password" class="form-control" id="currentPassword" name="currentPassword"
                                         placeholder="Enter current password" required>
                                 </div>
                                 <div class="mb-3">
                                     <label for="newPassword" class="form-label">New Password</label>
-                                    <input type="password" class="form-control" id="newPassword"
+                                    <input type="password" class="form-control" id="newPassword" name="newPassword"
                                         placeholder="Enter new password" required>
                                 </div>
                                 <div class="mb-3">
                                     <label for="repeatNewPassword" class="form-label">Repeat New Password</label>
-                                    <input type="password" class="form-control" id="repeatNewPassword"
+                                    <input type="password" class="form-control" id="repeatNewPassword" name="repeatNewPassword"
                                         placeholder="Repeat new password" required>
                                 </div>
-                                <button type="submit" class="btn btn-primary">Update Password</button>
+                                <button type="submit" name="update_password" class="btn btn-primary">Update Password</button>
                             </form>
                         </div>
                     </div>
 
-                    <!-- Notification Email -->
+                    <!-- Email Update Section -->
                     <div class="card shadow-sm">
                         <div class="card-header">
-                            <h5 class="mb-0">Notification Email</h5>
+                            <h5 class="mb-0"><?php echo empty($currentEmail) ? 'Add Email' : 'Update Email'; ?></h5>
                         </div>
                         <div class="card-body">
-                            <form id="email-form">
+                            <?php if ($email_error): ?>
+                                <div class="alert alert-danger"><?php echo $email_error; ?></div>
+                            <?php endif; ?>
+                            <?php if ($email_success): ?>
+                                <div class="alert alert-success"><?php echo $email_success; ?></div>
+                            <?php endif; ?>
+                            <form method="POST" action="">
                                 <div class="mb-3">
-                                    <label for="email" class="form-label">Forwarding Email Address</label>
-                                    <input type="email" class="form-control" id="email"
-                                        placeholder="Enter email where student mails are redirected" required>
-                                    <div class="form-text">Student emails/notifications will be forwarded to this
-                                        address (front-end demo only).</div>
+                                    <label for="email" class="form-label">Email Address</label>
+                                    <input type="email" class="form-control" id="email" name="email"
+                                        value="<?php echo htmlspecialchars($currentEmail); ?>"
+                                        placeholder="Enter your email" required>
+                                    <div class="form-text">Student reply emails will be sent to this address.</div>
                                 </div>
-                                <button type="submit" class="btn btn-primary">Save Email</button>
+                                <button type="submit" name="update_email" class="btn btn-primary"><?php echo empty($currentEmail) ? 'Add Email' : 'Update Email'; ?></button>
                             </form>
                         </div>
                     </div>
@@ -158,31 +246,8 @@ $teacher = requireTeacherIdentity($conn);
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.getElementById('password-form').addEventListener('submit', function (e) {
-            e.preventDefault();
-            const currentPassword = document.getElementById('currentPassword').value.trim();
-            const newPassword = document.getElementById('newPassword').value.trim();
-            const repeatNewPassword = document.getElementById('repeatNewPassword').value.trim();
-
-            if (newPassword !== repeatNewPassword) {
-                alert('New passwords do not match.');
-                return;
-            }
-
-            console.log('Password update request:', { currentPassword, newPassword });
-            alert('Password update requested (front-end only).');
-            e.target.reset();
-        });
-
-        document.getElementById('email-form').addEventListener('submit', function (e) {
-            e.preventDefault();
-            const email = document.getElementById('email').value.trim();
-            console.log('Notification email set to:', email);
-            alert('Notification email saved (front-end only).');
-        });
-
         document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../index.php';
+            window.location.href = '../logout.php';
         });
     </script>
 </body>

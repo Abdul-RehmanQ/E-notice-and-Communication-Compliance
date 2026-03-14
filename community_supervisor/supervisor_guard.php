@@ -26,7 +26,7 @@ if (!function_exists('requireSupervisorIdentity')) {
 
         $supervisorId = (int)($_SESSION['supervisor_id'] ?? 0);
         if ($supervisorId > 0) {
-            $supervisorStmt = $conn->prepare("SELECT cs.supervisor_id, cs.name, u.user_id, u.email
+            $supervisorStmt = $conn->prepare("SELECT cs.supervisor_id, cs.name, cs.department, u.user_id, u.email
                                               FROM community_supervisor cs
                                               INNER JOIN user u ON u.user_id = cs.supervisor_id
                                               WHERE cs.supervisor_id = ? AND u.role = 'community_supervisor'
@@ -41,7 +41,7 @@ if (!function_exists('requireSupervisorIdentity')) {
         if (!$supervisorIdentity) {
             $userId = (int)($_SESSION['user_id'] ?? 0);
             if ($userId > 0) {
-                $supervisorByUserStmt = $conn->prepare("SELECT cs.supervisor_id, cs.name, u.user_id, u.email
+                $supervisorByUserStmt = $conn->prepare("SELECT cs.supervisor_id, cs.name, cs.department, u.user_id, u.email
                                                         FROM community_supervisor cs
                                                         INNER JOIN user u ON u.user_id = cs.supervisor_id
                                                         WHERE u.user_id = ? AND u.role = 'community_supervisor'
@@ -61,6 +61,7 @@ if (!function_exists('requireSupervisorIdentity')) {
         $_SESSION['user_id'] = (int)$supervisorIdentity['user_id'];
         $_SESSION['supervisor_id'] = (int)$supervisorIdentity['supervisor_id'];
         $_SESSION['supervisor_name'] = $supervisorIdentity['name'];
+        $_SESSION['supervisor_department'] = $supervisorIdentity['department'];
         $_SESSION['role'] = 'community_supervisor';
 
         return $supervisorIdentity;
