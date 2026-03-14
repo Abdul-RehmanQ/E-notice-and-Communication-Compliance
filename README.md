@@ -1,277 +1,327 @@
-# University Department Community & Notification Portal
+# E-Notice and Communication Compliance System
 
-A role-based university portal built with core PHP + MySQL for department-level communication, course-driven notifications, and moderated community posts.
+A comprehensive web-based platform for managing educational notices, communications, and compliance across multiple user roles in an academic institution.
 
-## Project Goal
+## Overview
 
-### Current Goal (Web-Based)
-Build and run a reliable department-level web application for students, teachers, community supervisors, and super admins.
+This system enables efficient notification distribution and communication tracking across students, teachers, community supervisors, and administrators. It enforces compliance requirements while maintaining a streamlined user experience for each role.
 
-### Future Goal (Mobile + Scale)
-Extend the same platform to mobile apps (Android/iOS) while supporting **500–1000 users** (students + teachers + admins) with stable performance and secure access control.
+**Key Features:**
+- Multi-role authentication (students, teachers, supervisors, administrators)
+- Scope-based notice distribution (all, department, specific individuals)
+- Email notification system with compliance tracking
+- Community engagement through discussion boards
+- User settings and profile management
+- Database-driven architecture with role-based access control
 
----
+## System Architecture
 
-## What We Built (Completed Work)
+The application follows a role-based access model where users authenticate and access role-specific dashboards. Each role has dedicated pages and permissions.
 
-### 1) Multi-Role Authentication & Session Flows
-- Student login from `index.php`
-- Teacher login from `teacher/login.php`
-- Community Supervisor login from `community_supervisor/login.php`
-- Super Admin login from `super_admin/login.php`
-- Role-specific session identities are enforced via guard files:
-  - `student/student_guard.php`
-  - `teacher/teacher_guard.php`
-  - `community_supervisor/supervisor_guard.php`
-- Secure logout with login/logout timestamps in `logout.php`
+**Core Components:**
 
-### 2) Community Module (Student + Teacher)
-- Students and teachers can:
-  - Create text/image posts
-  - Choose post scope (`all` university or `department`)
-  - Set expiration window
-  - Delete their own posts
-- Implemented in:
-  - `student/community.php`
-  - `teacher/community.php`
+1. **Authentication Layer** — Central login page (`index.php`) validates credentials against the user database. Passwords use Argon2id hashing for security. Role determination happens at login and session establishment.
 
-### 3) Community Supervisor Moderation
-- Supervisor dashboard for pending posts review:
-  - Approve post
-  - Reject and delete post
-  - View moderation stats and recent actions
-- Implemented in `community_supervisor/dashboard.php`
+2. **Role-Specific Modules** — Four main user paths:
+   - **Student** — View assigned notices, join communities, reply to teachers
+   - **Teacher** — Post notices to departments/classes, manage community discussions
+   - **Community Supervisor** — Post campus-wide notices, supervise student engagement
+   - **Super Admin** — System-wide administration, user enrollment, compliance oversight
 
-### 4) Department-Scoped Moderation (Important Security Logic)
-We implemented and hardened department scope rules:
-- Supervisor department is loaded during login and guard resolution.
-- Supervisor top bar now displays department.
-- Supervisor can only see pending posts from their own department.
-- Supervisor can only approve/reject posts from their own department.
-- Department comparison is normalized (`trim + lowercase`) to avoid mismatches caused by spacing/case differences.
-- Teacher and student community feeds also use normalized department matching.
+3. **Notice System** — Posts created by authorized users (teachers, supervisors, admins) with scope control (all users, specific department, or targeted list). Pending approval before publication.
 
-### 5) Teacher Notifications
-- Teachers send class notifications only for offerings assigned to them.
-- Notifications are delivered to enrolled students.
-- Students view teacher notifications in `student/dashboard.php`.
-- Teachers can delete sent notification batches.
-- Implemented in `teacher/dashboard.php`.
+4. **Email Integration** — Uses PHPMailer library for sending notifications. Stores message records in the database for compliance audit trails.
 
-### 6) Email Reply System
-- Student reply-to-teacher email flow via PHPMailer (`send_email.php`).
-- SMTP settings are separated in:
-  - `email_config.php`
-  - `email_config.local.php` (local/private)
-- Email domain policy checks are included.
-- Email send attempts are logged in `messages` table.
+5. **Access Guards** — Each role-specific directory includes a guard file (`*_guard.php`) that validates session identity before allowing page access. Prevents unauthorized cross-role navigation.
 
-### 7) Super Admin Academic Operations
-Implemented in `super_admin/dashboard.php` and `super_admin/re_enroll.php`:
-- Import students from Excel/CSV/ODS
-- Import teachers from Excel/CSV/ODS
-- Import courses from Excel/CSV/ODS
-- Assign courses to teachers by session/semester/section (class offering model)
-- Individual and group enrollment with scope validation
-- Re-enroll workflow for special cases
-- Department-scoped controls for admin operations
+## Database Schema
 
-### 8) Account Settings
-- Password update (Argon2id verification + hashing)
-- Email update with uniqueness checks
-- Role-specific settings pages under each module folder
+The system uses a MySQL database (`project`) with the following main tables:
 
----
+**Users Table:**
+- Core authentication and role assignment
+- Stores hashed passwords (Argon2id)
+- Tracks login times
 
-## Technical Approach Followed
+**Student Table:**
+- Roll number, name, department, session
+- Foreign key to user table
 
-This project follows a **modular role-based PHP approach** (without a framework) using:
-- Server-rendered pages (PHP + Bootstrap)
-- Prepared statements (`mysqli`) for DB safety
-- Session-based authentication per role
-- PRG-style flash messages in many handlers (Post/Redirect/Get)
-- Department-level authorization rules in query conditions
-- Utility-style common config for DB and password hashing in `config.php`
+**Teacher Table:**
+- Name, department assignment
+- Foreign key to user table
 
-Why this approach was chosen:
-- Fast to implement for academic delivery
-- Easy to host on XAMPP/shared PHP hosting
-- Clear role separation by folder and page
+**Community Supervisor Table:**
+- Name, department responsibility
 
----
+**Posts Table:**
+- Notice content, images, creation timestamp
+- Expiration date for automatic removal
+- Scope: 'all', 'department', or targeted
+- Status: 'pending', 'approved', 'rejected'
 
-## Frontend ↔ Backend Connection (How It Works)
+**Messages Table:**
+- Sender/recipient IDs, email addresses
+- Subject and body content
+- Sent timestamp and delivery status
 
-### UI Rendering
-- Pages are rendered by PHP directly (HTML + Bootstrap + FontAwesome).
-- Each role has its own pages inside dedicated folders.
+**Notifications Table:**
+- Sender/recipient IDs and message content
+- Timestamp and read status
+- For in-app notification tracking
 
-### Request Handling Pattern
-Most pages use a same-file request cycle:
-1. Browser loads `*.php` page (GET)
-2. User submits form (POST)
-3. Top-of-file PHP handler validates input and executes SQL
-4. Success/error set using local variables or flash session
-5. Page reloads to reflect updated data
+**Queries Table:**
+- Student-teacher communication requests
+- Status tracking (pending, resolved)
 
-### Example Flow: Teacher Creates Community Post
-1. Teacher opens `teacher/community.php`
-2. Fills form + optional image upload
-3. POST request reaches same file
-4. Backend validates content/image and inserts into `posts`
-5. Status remains `pending`
-6. Supervisor later reviews in `community_supervisor/dashboard.php`
+## Configuration
 
-### Example Flow: Supervisor Approves/Rejects
-1. Supervisor submits approve/reject action in `community_supervisor/dashboard.php`
-2. Backend checks post status + expiration + department scope
-3. On approve: updates `posts.status = approved`
-4. On reject: logs review and deletes post
-5. Stats and pending counts update after redirect
+### Database Setup
 
-### Example Flow: Teacher Notifications
-1. Teacher chooses assigned class offering in `teacher/dashboard.php`
-2. Backend verifies teacher-offering assignment
-3. Pulls enrolled students from `student_course_enrollments`
-4. Inserts notification rows into `notifications`
-5. Students read notifications on `student/dashboard.php`
+1. Create a MySQL database named `project`
+2. Import the SQL schema from `DB/project (1).sql`
+3. Update credentials in `config.php`:
+   ```
+   $host = 'localhost';
+   $dbname = 'project';
+   $username = 'root';
+   $password = '';
+   ```
 
----
+### Email Configuration
 
-## Project Structure
+Edit `email_config.php` with your SMTP settings:
+- Server address and port
+- Sender email and credentials
+- Authentication method
 
-```text
-fyp/
-├─ index.php
-├─ config.php
-├─ logout.php
-├─ send_email.php
-├─ DB/project.sql
-├─ student/
-│  ├─ dashboard.php
-│  ├─ community.php
-│  ├─ settings.php
-│  └─ student_guard.php
-├─ teacher/
-│  ├─ login.php
-│  ├─ dashboard.php
-│  ├─ community.php
-│  ├─ settings.php
-│  └─ teacher_guard.php
-├─ community_supervisor/
-│  ├─ login.php
-│  ├─ dashboard.php
-│  ├─ settings.php
-│  └─ supervisor_guard.php
-├─ super_admin/
-│  ├─ login.php
-│  ├─ dashboard.php
-│  ├─ re_enroll.php
-│  └─ settings.php
-└─ vendor/
+### Dependencies
+
+Install required packages via Composer:
+```bash
+composer install
 ```
 
----
+Packages:
+- **PHPMailer** — Email delivery with SMTP/POP3 support
+- **OpenSpout** — Spreadsheet reading/writing (for data exports)
 
-## Database Design (Core Tables)
+## User Roles and Workflows
 
-From `DB/project.sql`, major tables include:
-- Identity and roles: `user`, `student`, `teacher`, `community_supervisor`, `super_admin`
-- Community: `posts`, `post_reviews`
-- Notifications & messaging: `notifications`, `messages`
-- Academics: `courses`, `course_offerings`, `teacher_course_assignments`, `student_course_enrollments`
+### Student
+**Entry Point:** `student/dashboard.php`
 
-This schema allows:
-- Single user identity with role-linked profile tables
-- Moderation workflow for posts
-- Course-offering based teacher-student communication
-- Enrollment and assignment traceability
+Students log in with roll number and password. The dashboard displays:
+- All active notices (department-wide and campus-wide)
+- Assigned community discussions
+- Reply interface for contacting teachers
+- Profile settings and preferences
 
----
+**Workflow:**
+1. Login via main page
+2. View incoming notices
+3. Respond to teacher messages via dashboard
+4. Join community discussions
+5. Update personal settings
 
-## Security & Validation Practices Used
+### Teacher
+**Entry Point:** `teacher/dashboard.php`
 
-- Argon2id password hashing and verification (`config.php`)
-- Prepared statements on DB operations
-- Role checks before protected routes
-- Session lifecycle handling on logout
-- Input validation for:
-  - emails
-  - required fields
-  - section/semester constraints
-  - image size/type
-- Department-scope enforcement in queries
+Teachers can create and manage department-specific notices and community posts.
 
----
+**Workflow:**
+1. Authenticate with credentials
+2. Create new notice (content, expiration, scope: department or all)
+3. Participate in community discussions
+4. Receive student replies via email
+5. Manage settings and profile
 
-## Setup Instructions (Local)
+### Community Supervisor
+**Entry Point:** `community_supervisor/dashboard.php`
 
-### Prerequisites
-- PHP 8.2+ (Argon2id support required)
-- MySQL / MariaDB
-- Composer
-- XAMPP (recommended for local)
+Supervisors manage campus-wide communications and approve content.
 
-### Steps
-1. Clone/copy project to XAMPP htdocs:
-   - `c:\xampp\htdocs\fyp`
-2. Create DB and import schema:
-   - import `DB/project.sql`
-3. Install dependencies:
-   - `composer install`
-4. Configure DB in `config.php`
-5. Configure SMTP in `email_config.local.php`
-6. Start Apache + MySQL
-7. Open:
-   - `http://localhost/fyp/`
+**Workflow:**
+1. Login to supervisor dashboard
+2. Post campus-wide notices
+3. Oversee community engagement
+4. Approve or reject pending posts
+5. Track compliance metrics
 
----
+### Super Admin
+**Entry Point:** `super_admin/dashboard.php`
 
-## Deployment Notes
+Full system control including user enrollment, compliance oversight, and system settings.
 
-You **do not need Laravel** to deploy this project.
+**Workflow:**
+1. Access admin dashboard
+2. Enroll new students/teachers/supervisors
+3. Review system-wide compliance reports
+4. Manage expiring notices
+5. Configure system settings
 
-Current stack can be deployed on:
-- Apache/Nginx + PHP-FPM
-- MySQL/MariaDB
+## File Structure
 
-For 500–1000 users, recommended production hardening:
-- Enable OPcache
-- Add/verify DB indexes on frequent filters (`user_id`, `status`, `department`, `offering_id`, timestamps)
-- Use HTTPS
-- Move secrets to environment variables
-- Enable application + server logs
-- Regular DB backups
+```
+project/
+├── config.php                  # Database and password hashing functions
+├── email_config.php           # SMTP configuration
+├── index.php                  # Main login page
+├── send_email.php             # Email sending utilities
+├── logout.php                 # Session cleanup
+│
+├── student/
+│   ├── dashboard.php          # Student notice view and reply interface
+│   ├── community.php          # Community discussion board
+│   ├── settings.php           # Profile and preferences
+│   └── student_guard.php      # Session validation
+│
+├── teacher/
+│   ├── login.php              # Teacher authentication
+│   ├── dashboard.php          # Notice creation and management
+│   ├── community.php          # Community discussion moderation
+│   ├── settings.php           # Profile settings
+│   └── teacher_guard.php      # Session validation
+│
+├── community_supervisor/
+│   ├── login.php              # Supervisor authentication
+│   ├── dashboard.php          # Supervisor oversight
+│   ├── settings.php           # Supervisor profile
+│   └── supervisor_guard.php   # Session validation
+│
+├── super_admin/
+│   ├── login.php              # Admin authentication
+│   ├── dashboard.php          # System administration
+│   ├── re_enroll.php          # User enrollment
+│   ├── settings.php           # System settings
+│   └── admin_guard.php        # (implicit, admin_dashboard validates role)
+│
+├── DB/
+│   └── project (1).sql        # Complete database schema
+│
+├── composer.json              # PHP dependencies
+├── vendor/                    # Installed packages (PHPMailer, OpenSpout)
+```
 
----
+## Key Workflows
 
-## Scalability Roadmap (500–1000 Users)
+### Notice Creation and Distribution
 
-### Phase 1 (Now)
-- Stabilize current web app
-- Improve indexes and query profiling
-- Add audit logs and better monitoring
+1. Authorized user (teacher/supervisor/admin) accesses dashboard
+2. Clicks "Create Notice"
+3. Enters content, selects scope (all/department/targeted)
+4. Optionally uploads image attachment
+5. Sets expiration date
+6. Submits for approval
 
-### Phase 2 (Next)
-- API-first endpoints for mobile readiness
-- Token/session strategy for app clients
-- Notification queueing for bulk operations
+**For Pending Approval:**
+- Super admin reviews post in moderation queue
+- Approves or rejects with optional feedback
+- Approved posts become visible to target audience
+- Email notification sent to creator
 
-### Phase 3 (Future Mobile)
-- Build Android/iOS app (or Flutter/React Native)
-- Reuse same backend rules for role and department access
+### Email Reply Flow
 
----
+1. Student receives email notification about a notice
+2. Can reply directly via dashboard
+3. System sends email to teacher/original sender
+4. Conversation logged in messages table for compliance
 
-## Suggested Next Evolution
+### Session Management
 
-For long-term maintainability and team collaboration, migrate gradually to Laravel:
-- Keep current app operational
-- Move module-by-module (Auth → Community → Moderation → Notifications → Admin tools)
-- Add automated tests during migration
+- Login sets session variables: user_id, roll_number (student), student_id, student_name
+- Guard files on each role page validate session before rendering
+- Automatic timeout handled by PHP session settings
+- Logout (`logout.php`) clears session and redirects to login
 
----
+## Security Features
 
-## Credits / Context
+**Password Security:**
+- Argon2id hashing with verification function `verifyPasswordArgon2id()`
+- One-way hash — password never stored in plaintext
+- Constant-time comparison prevents timing attacks
 
-This is an academic FYP-oriented system designed for departmental communication and governance, with a roadmap toward institution-level reliability and future mobile adoption.
+**SQL Injection Prevention:**
+- Prepared statements with parameter binding throughout
+- `prepareAndExecute()` utility for safe queries
+
+**Session Validation:**
+- Guard files verify user identity and role before page access
+- Session hijacking prevention via secure cookie settings
+
+**Data Access Control:**
+- Role-based restrictions on notice scopes
+- Students can only see notices meant for their department or all users
+- Teachers cannot modify other teachers' posts
+- Admins have full visibility
+
+## Development Notes
+
+### Adding a New Notice
+
+Edit the relevant dashboard file (e.g., `teacher/dashboard.php`):
+1. Create a form to collect content, scope, expiration
+2. Validate input server-side
+3. Prepare a statement to insert into `posts` table
+4. Set status to 'pending' if approval required
+5. Trigger email notification to admin if needed
+
+### Modifying Email Templates
+
+Edit `send_email.php`. All emails use HTML format with consistent styling. Example structure:
+```php
+$emailBody = "
+    <div style='font-family: Arial, sans-serif; padding: 20px;'>
+        <h3>" . htmlspecialchars($subject) . "</h3>
+        <p>" . nl2br(htmlspecialchars($message)) . "</p>
+    </div>
+";
+```
+
+### Extending Roles
+
+To add a new user role:
+1. Add role value to `user` table (e.g., 'moderator')
+2. Create new directory with login, dashboard, guard, and settings pages
+3. Update `index.php` to route to new role's dashboard after login
+4. Implement guard file with `require*Identity()` function matching pattern in existing guards
+
+## Troubleshooting
+
+**"Connected successfully" message on every page:**
+Remove or comment out the debug echo in `config.php` line 18:
+```php
+// echo "Connected successfully";
+```
+
+**Emails not sending:**
+- Verify SMTP credentials in `email_config.php`
+- Check server firewall allows outbound SMTP (port 587 or 465)
+- Review PHPMailer exception messages for detailed errors
+
+**Posts not appearing after creation:**
+- Verify status is 'approved' (not 'pending') in posts table
+- Check scope matches user's department
+- Confirm expiration date is in future
+
+**Session timeout issues:**
+- Adjust `session.gc_maxlifetime` in php.ini (default 1440 seconds = 24 minutes)
+- Implement JavaScript timer to warn user before logout
+
+## Future Enhancements
+
+- Real-time notifications via WebSocket
+- Bulk notice import from CSV
+- Advanced analytics dashboard for compliance reporting
+- Two-factor authentication
+- Mobile app
+- Notice template library
+- Automated compliance validation rules
+
+## Support and Maintenance
+
+For issues or feature requests, contact the development team. Ensure regular database backups and monitor server logs for errors.
+
+## License
+
+Internal use only.
