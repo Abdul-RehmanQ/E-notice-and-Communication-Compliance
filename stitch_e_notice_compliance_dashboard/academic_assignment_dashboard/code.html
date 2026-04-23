@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Academic Assignment Dashboard | EduCompliance</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&amp;family=Source+Sans+3:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-variant": "#e4e2e4",
+                        "error": "#ba1a1a",
+                        "secondary": "#0040e0",
+                        "on-background": "#1b1b1d",
+                        "on-secondary-container": "#efefff",
+                        "secondary-fixed": "#dde1ff",
+                        "on-primary-container": "#7c839b",
+                        "on-secondary": "#ffffff",
+                        "outline": "#76777d",
+                        "on-error": "#ffffff",
+                        "surface-dim": "#dcd9db",
+                        "tertiary": "#000000",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "primary": "#000000",
+                        "on-tertiary-fixed": "#002113",
+                        "primary-fixed-dim": "#bec6e0",
+                        "surface-container": "#f0edef",
+                        "primary-fixed": "#dae2fd",
+                        "surface-container-lowest": "#ffffff",
+                        "tertiary-fixed": "#6ffbbe",
+                        "surface-tint": "#565e74",
+                        "on-secondary-fixed-variant": "#0035be",
+                        "surface-container-high": "#eae7e9",
+                        "tertiary-container": "#002113",
+                        "on-primary": "#ffffff",
+                        "surface-container-low": "#f6f3f5",
+                        "primary-container": "#131b2e",
+                        "on-tertiary-container": "#009668",
+                        "on-primary-fixed": "#131b2e",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "surface-container-highest": "#e4e2e4",
+                        "surface-bright": "#fcf8fa",
+                        "on-tertiary": "#ffffff",
+                        "inverse-primary": "#bec6e0",
+                        "secondary-container": "#2e5bff",
+                        "surface": "#fcf8fa",
+                        "on-surface-variant": "#45464d",
+                        "background": "#fcf8fa",
+                        "on-error-container": "#93000a",
+                        "secondary-fixed-dim": "#b8c3ff",
+                        "inverse-surface": "#303032",
+                        "on-primary-fixed-variant": "#3f465c",
+                        "on-surface": "#1b1b1d",
+                        "inverse-on-surface": "#f3f0f2",
+                        "outline-variant": "#c6c6cd",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#001356",
+                        "accent-amber": "#F59E0B"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "h3": ["Sora"], "h1": ["Sora"], "label-caps": ["Sora"], "body-md": ["Source Sans 3"], "body-sm": ["Source Sans 3"], "h2": ["Sora"], "body-lg": ["Source Sans 3"], "data-tabular": ["Source Sans 3"]
+                    },
+                    "fontSize": {
+                        "h3": ["20px", {"lineHeight": "1.4", "fontWeight": "500"}],
+                        "h1": ["32px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                        "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-sm": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                        "h2": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "data-tabular": ["14px", {"lineHeight": "1", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        body { background-color: #F8FAFC; font-family: 'Source Sans 3', sans-serif; }
+    </style>
+</head>
+<body class="text-on-surface">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 w-[280px] h-full border-r border-slate-800 bg-[#0F172A] dark:bg-slate-950 flex flex-col z-50">
+<div class="p-6">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-white/10 rounded flex items-center justify-center border border-white/20">
+<span class="material-symbols-outlined text-white">school</span>
+</div>
+<div>
+<h1 class="text-white text-xl font-bold tracking-tight font-h3 leading-none">EduCompliance</h1>
+<p class="text-slate-400 text-xs font-medium uppercase tracking-widest mt-1">Academic Administration</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-4 mt-4 space-y-1">
+<!-- Active: Dashboard -->
+<a class="flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 border-l-4 border-blue-600 transition-all font-['Sora'] text-sm font-semibold tracking-wide" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-['Sora'] text-sm font-semibold tracking-wide" href="#">
+<span class="material-symbols-outlined" data-icon="campaign">campaign</span>
+                Notices
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-['Sora'] text-sm font-semibold tracking-wide" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+                User Directory
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-['Sora'] text-sm font-semibold tracking-wide" href="#">
+<span class="material-symbols-outlined" data-icon="school">school</span>
+                Course Management
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-['Sora'] text-sm font-semibold tracking-wide" href="#">
+<span class="material-symbols-outlined" data-icon="gavel">gavel</span>
+                Compliance Audit
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-['Sora'] text-sm font-semibold tracking-wide" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+                System Logs
+            </a>
+</nav>
+<div class="px-4 py-6 border-t border-slate-800 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-['Sora'] text-sm font-semibold tracking-wide" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+                Settings
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-['Sora'] text-sm font-semibold tracking-wide" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+                Logout
+            </a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-[280px] min-h-screen">
+<!-- TopAppBar -->
+<header class="fixed top-0 right-0 left-[280px] h-16 bg-[#F8FAFC] flex items-center justify-between px-8 z-40 border-b border-slate-200 shadow-sm shadow-slate-200/50">
+<div class="flex items-center gap-4 flex-1">
+<div class="relative w-96">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+<input class="w-full bg-white border border-slate-200 rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none font-body-sm" placeholder="Search operations, logs, or users..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4 border-r border-slate-200 pr-6">
+<button class="hover:bg-slate-100 rounded-lg p-2 transition-all relative">
+<span class="material-symbols-outlined text-slate-600" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-[#F8FAFC]"></span>
+</button>
+<button class="hover:bg-slate-100 rounded-lg p-2 transition-all">
+<span class="material-symbols-outlined text-slate-600" data-icon="help_center">help_center</span>
+</button>
+<button class="hover:bg-slate-100 rounded-lg p-2 transition-all">
+<span class="material-symbols-outlined text-slate-600" data-icon="apps">apps</span>
+</button>
+</div>
+<div class="flex items-center gap-3">
+<div class="text-right">
+<p class="font-h3 text-sm text-slate-900 leading-none">Dr. Sarah Jenkins</p>
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-primary-container text-white mt-1 uppercase">Super Admin</span>
+</div>
+<img alt="User Avatar" class="w-10 h-10 rounded-full border-2 border-white shadow-sm" data-alt="professional portrait of a senior academic administrator with a neutral focused expression in a modern office" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKrjotHNBAEoAv5kd3TaAIsqEv7YkoOarkZLe_BauGIWODMX0ttwtRaVIL6J5VwGOa_57ChsOVF5CHi3h7M-2MJOSJCu2P9_51BgreSG9wLJWeHVyBanuPI2PeLnl4TfUtaERaMBLFs2B7gVn68tj_itgCu1Iun6vxxAfdkKGD6t4lnVBYNavE30x80m11lvyalUEHICg_ZnWbq0nnrpNMR0FZc3tjevE2yooXr8Ctm5AJp2zGqTyXIW_aC5_3igLSPlE4r8m3ng"/>
+</div>
+</div>
+</header>
+<!-- Canvas -->
+<div class="pt-24 px-8 pb-12">
+<!-- Breadcrumbs & Heading -->
+<div class="mb-8">
+<div class="flex items-center gap-2 text-slate-500 text-xs font-medium mb-2 uppercase tracking-wider">
+<span>Admin</span>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<span class="text-blue-600">Academic Assignment Dashboard</span>
+</div>
+<h2 class="font-h1 text-slate-900">Assignment Control Center</h2>
+<p class="font-body-md text-slate-600 max-w-2xl">Manage global course allocations, student enrollments, and academic data synchronization from a unified operations portal.</p>
+</div>
+<!-- Operational Alerts -->
+<div class="mb-8 space-y-3">
+<div class="flex items-center gap-4 bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded shadow-sm">
+<span class="material-symbols-outlined text-emerald-600" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="flex-1">
+<p class="font-h3 text-sm text-emerald-900 leading-none">Synchronization Successful</p>
+<p class="font-body-sm text-emerald-700 mt-1">24 new courses from the central registrar have been successfully imported and mapped.</p>
+</div>
+<button class="text-emerald-400 hover:text-emerald-600">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="flex items-center gap-4 bg-amber-50 border-l-4 border-amber-500 p-4 rounded shadow-sm">
+<span class="material-symbols-outlined text-amber-600" style="font-variation-settings: 'FILL' 1;">warning</span>
+<div class="flex-1">
+<p class="font-h3 text-sm text-amber-900 leading-none">Action Required: Compliance Check</p>
+<p class="font-body-sm text-amber-700 mt-1">12 teachers have overlapping course sessions in the Fall 2024 semester. Review required.</p>
+</div>
+<button class="text-amber-400 hover:text-amber-600">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+</div>
+<!-- Summary Stats -->
+<div class="grid grid-cols-5 gap-6 mb-8">
+<div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm border-t-4 border-t-primary-container">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-slate-400 bg-slate-50 p-2 rounded">person_pin</span>
+<span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">+12 New</span>
+</div>
+<p class="font-label-caps text-slate-500 mb-1 uppercase">Total Teachers</p>
+<p class="font-h1 text-2xl text-slate-900">1,482</p>
+</div>
+<div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm border-t-4 border-t-primary-container">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-slate-400 bg-slate-50 p-2 rounded">groups</span>
+<span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">+342 New</span>
+</div>
+<p class="font-label-caps text-slate-500 mb-1 uppercase">Active Students</p>
+<p class="font-h1 text-2xl text-slate-900">12,890</p>
+</div>
+<div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm border-t-4 border-t-primary-container">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-slate-400 bg-slate-50 p-2 rounded">book_5</span>
+</div>
+<p class="font-label-caps text-slate-500 mb-1 uppercase">Courses</p>
+<p class="font-h1 text-2xl text-slate-900">458</p>
+</div>
+<div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm border-t-4 border-t-accent-amber">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-accent-amber bg-amber-50 p-2 rounded">assignment_turned_in</span>
+</div>
+<p class="font-label-caps text-slate-500 mb-1 uppercase">Assignments</p>
+<p class="font-h1 text-2xl text-slate-900">3,102</p>
+</div>
+<div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm border-t-4 border-t-accent-amber">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-accent-amber bg-amber-50 p-2 rounded">fact_check</span>
+<span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">98% Goal</span>
+</div>
+<p class="font-label-caps text-slate-500 mb-1 uppercase">Enrollments</p>
+<p class="font-h1 text-2xl text-slate-900">42,150</p>
+</div>
+</div>
+<!-- Action Grid: Bento Style -->
+<div class="grid grid-cols-12 gap-6 mb-8">
+<!-- Import Module -->
+<div class="col-span-12 lg:col-span-4 space-y-6">
+<div class="bg-white p-6 rounded-lg border border-slate-200 shadow-sm flex flex-col h-full">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-blue-600 bg-blue-50 p-2 rounded-lg" style="font-variation-settings: 'FILL' 1;">cloud_upload</span>
+<h3 class="font-h3 text-slate-900">Bulk Import Utility</h3>
+</div>
+<div class="flex-1 space-y-4">
+<div class="group relative border-2 border-dashed border-slate-200 hover:border-blue-400 rounded-xl p-8 transition-all bg-slate-50/50 cursor-pointer flex flex-col items-center justify-center text-center">
+<span class="material-symbols-outlined text-slate-300 group-hover:text-blue-500 text-4xl mb-3">upload_file</span>
+<p class="font-h3 text-sm text-slate-700">Drop entity file here</p>
+<p class="font-body-sm text-slate-400 mt-1">Supports .xlsx or .csv (Max 50MB)</p>
+<input class="absolute inset-0 opacity-0 cursor-pointer" type="file"/>
+</div>
+<div class="space-y-2">
+<label class="font-label-caps text-slate-500 text-[10px] uppercase">Select Entity Type</label>
+<div class="grid grid-cols-3 gap-2">
+<button class="flex flex-col items-center justify-center p-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all">
+<span class="material-symbols-outlined text-slate-500 mb-1">person</span>
+<span class="text-[10px] font-bold">Students</span>
+</button>
+<button class="flex flex-col items-center justify-center p-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all">
+<span class="material-symbols-outlined text-slate-500 mb-1">work</span>
+<span class="text-[10px] font-bold">Teachers</span>
+</button>
+<button class="flex flex-col items-center justify-center p-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition-all">
+<span class="material-symbols-outlined text-slate-500 mb-1">auto_stories</span>
+<span class="text-[10px] font-bold">Courses</span>
+</button>
+</div>
+</div>
+</div>
+<div class="mt-6 pt-6 border-t border-slate-100">
+<p class="text-[11px] font-medium text-slate-500 italic">Hint: Ensure column headers match the Master Academic Template v4.2</p>
+</div>
+</div>
+</div>
+<!-- Assignment Form -->
+<div class="col-span-12 lg:col-span-5">
+<div class="bg-white p-6 rounded-lg border border-slate-200 shadow-sm h-full">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-accent-amber bg-amber-50 p-2 rounded-lg" style="font-variation-settings: 'FILL' 1;">assignment_add</span>
+<h3 class="font-h3 text-slate-900">Assign Course to Teacher</h3>
+</div>
+<form class="space-y-4">
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-2">
+<label class="font-label-caps text-slate-500 text-[10px] uppercase">Teacher</label>
+<select class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm font-body-sm focus:ring-2 focus:ring-blue-500/20 outline-none">
+<option>Select Faculty Member</option>
+<option>Dr. Alan Turing</option>
+<option>Prof. Ada Lovelace</option>
+</select>
+</div>
+<div class="space-y-2">
+<label class="font-label-caps text-slate-500 text-[10px] uppercase">Course</label>
+<select class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm font-body-sm focus:ring-2 focus:ring-blue-500/20 outline-none">
+<option>Select Course Code</option>
+<option>CS101: Fundamentals</option>
+<option>MATH204: Calculus III</option>
+</select>
+</div>
+</div>
+<div class="grid grid-cols-3 gap-4">
+<div class="space-y-2">
+<label class="font-label-caps text-slate-500 text-[10px] uppercase">Session</label>
+<input class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm font-body-sm focus:ring-2 focus:ring-blue-500/20 outline-none" placeholder="e.g. Morning" type="text"/>
+</div>
+<div class="space-y-2">
+<label class="font-label-caps text-slate-500 text-[10px] uppercase">Semester</label>
+<select class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm font-body-sm focus:ring-2 focus:ring-blue-500/20 outline-none">
+<option>Fall 2024</option>
+<option>Spring 2025</option>
+</select>
+</div>
+<div class="space-y-2">
+<label class="font-label-caps text-slate-500 text-[10px] uppercase">Section</label>
+<input class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-2 text-sm font-body-sm focus:ring-2 focus:ring-blue-500/20 outline-none" placeholder="e.g. A-1" type="text"/>
+</div>
+</div>
+<div class="pt-4">
+<button class="w-full bg-primary-container text-white font-h3 text-sm py-3 rounded-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2" type="button">
+<span class="material-symbols-outlined text-sm">bolt</span>
+                                    Execute Assignment
+                                </button>
+</div>
+</form>
+</div>
+</div>
+<!-- Enroll Student Module -->
+<div class="col-span-12 lg:col-span-3">
+<div class="bg-primary-container p-6 rounded-lg border border-slate-800 shadow-xl h-full flex flex-col text-white">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-white bg-white/10 p-2 rounded-lg">person_add</span>
+<h3 class="font-h3 text-white">Enroll Student</h3>
+</div>
+<div class="flex-1 space-y-6">
+<button class="w-full bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl p-4 transition-all text-left flex items-center gap-4">
+<span class="material-symbols-outlined p-2 bg-blue-500/20 text-blue-400 rounded-full">person</span>
+<div>
+<p class="font-h3 text-sm leading-none mb-1">Single Enrollment</p>
+<p class="text-xs text-slate-400">Search student by ID or Name</p>
+</div>
+</button>
+<button class="w-full bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl p-4 transition-all text-left flex items-center gap-4">
+<span class="material-symbols-outlined p-2 bg-accent-amber/20 text-accent-amber rounded-full">group_add</span>
+<div>
+<p class="font-h3 text-sm leading-none mb-1">Group Enrollment</p>
+<p class="text-xs text-slate-400">Batch assign multiple students</p>
+</div>
+</button>
+</div>
+<div class="mt-8">
+<div class="bg-blue-600/20 border border-blue-500/30 p-3 rounded text-xs text-blue-200 flex gap-3">
+<span class="material-symbols-outlined text-sm">info</span>
+<p>Enrollment window closes in 14 days for Fall 2024.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Operational Logs Table -->
+<div class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+<div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-600">history</span>
+<h3 class="font-h3 text-slate-900">Recent Operational Logs</h3>
+</div>
+<div class="flex gap-2">
+<button class="text-xs font-bold font-label-caps text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1 rounded bg-white transition-all">Export PDF</button>
+<button class="text-xs font-bold font-label-caps text-blue-600 hover:text-blue-800 border border-blue-200 px-3 py-1 rounded bg-blue-50 transition-all">View All Logs</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-slate-50">
+<tr>
+<th class="px-6 py-3 font-label-caps text-[11px] text-slate-500 uppercase tracking-widest border-b border-slate-200">Timestamp</th>
+<th class="px-6 py-3 font-label-caps text-[11px] text-slate-500 uppercase tracking-widest border-b border-slate-200">Operation</th>
+<th class="px-6 py-3 font-label-caps text-[11px] text-slate-500 uppercase tracking-widest border-b border-slate-200">Entity</th>
+<th class="px-6 py-3 font-label-caps text-[11px] text-slate-500 uppercase tracking-widest border-b border-slate-200">Status</th>
+<th class="px-6 py-3 font-label-caps text-[11px] text-slate-500 uppercase tracking-widest border-b border-slate-200">System Tag</th>
+<th class="px-6 py-3 font-label-caps text-[11px] text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100">
+<tr class="hover:bg-slate-50/80 transition-all">
+<td class="px-6 py-4 font-data-tabular text-slate-500">Oct 24, 09:42 AM</td>
+<td class="px-6 py-4 font-body-sm font-semibold text-slate-900">Course Assignment</td>
+<td class="px-6 py-4 font-body-sm text-slate-600">Dr. Turing → CS101-A</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                                        COMPLIANT
+                                    </span>
+</td>
+<td class="px-6 py-4"><span class="font-body-sm text-slate-400 bg-slate-100 px-2 py-0.5 rounded text-[10px]">FACULTY_CORE</span></td>
+<td class="px-6 py-4 text-right">
+<button class="material-symbols-outlined text-slate-400 hover:text-blue-600 transition-colors">more_vert</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50/80 transition-all">
+<td class="px-6 py-4 font-data-tabular text-slate-500">Oct 24, 09:38 AM</td>
+<td class="px-6 py-4 font-body-sm font-semibold text-slate-900">Bulk Enrollment</td>
+<td class="px-6 py-4 font-body-sm text-slate-600">Import_342_Students.csv</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">sync</span>
+                                        PROCESSING
+                                    </span>
+</td>
+<td class="px-6 py-4"><span class="font-body-sm text-slate-400 bg-slate-100 px-2 py-0.5 rounded text-[10px]">SYS_BATCH</span></td>
+<td class="px-6 py-4 text-right">
+<button class="material-symbols-outlined text-slate-400 hover:text-blue-600 transition-colors">more_vert</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50/80 transition-all">
+<td class="px-6 py-4 font-data-tabular text-slate-500">Oct 24, 09:15 AM</td>
+<td class="px-6 py-4 font-body-sm font-semibold text-slate-900">User Audit</td>
+<td class="px-6 py-4 font-body-sm text-slate-600">Access Key: ADMIN_JH</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">error</span>
+                                        PENDING_REV
+                                    </span>
+</td>
+<td class="px-6 py-4"><span class="font-body-sm text-slate-400 bg-slate-100 px-2 py-0.5 rounded text-[10px]">SECURITY</span></td>
+<td class="px-6 py-4 text-right">
+<button class="material-symbols-outlined text-slate-400 hover:text-blue-600 transition-colors">more_vert</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50/80 transition-all">
+<td class="px-6 py-4 font-data-tabular text-slate-500">Oct 24, 08:50 AM</td>
+<td class="px-6 py-4 font-body-sm font-semibold text-slate-900">Sync Failure</td>
+<td class="px-6 py-4 font-body-sm text-slate-600">LMS Integration Connector</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-700">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">cancel</span>
+                                        NON-COMPLIANT
+                                    </span>
+</td>
+<td class="px-6 py-4"><span class="font-body-sm text-slate-400 bg-slate-100 px-2 py-0.5 rounded text-[10px]">INTEGRATION</span></td>
+<td class="px-6 py-4 text-right">
+<button class="material-symbols-outlined text-slate-400 hover:text-blue-600 transition-colors">more_vert</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</main>
+</body></html>

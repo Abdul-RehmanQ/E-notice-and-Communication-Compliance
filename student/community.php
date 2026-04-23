@@ -9,48 +9,33 @@ $studentUserId = (int)$studentIdentity['user_id'];
 $error = '';
 $success = '';
 
-// Flash messages from PRG redirect
 if (isset($_SESSION['student_community_flash']) && is_array($_SESSION['student_community_flash'])) {
     $flashType = $_SESSION['student_community_flash']['type'] ?? '';
     $flashMessage = $_SESSION['student_community_flash']['message'] ?? '';
-    if ($flashType === 'success') {
-        $success = (string)$flashMessage;
-    } elseif ($flashType === 'error') {
-        $error = (string)$flashMessage;
-    }
+    if ($flashType === 'success') $success = (string)$flashMessage;
+    elseif ($flashType === 'error') $error = (string)$flashMessage;
     unset($_SESSION['student_community_flash']);
 }
 
 if (!function_exists('studentCommunityRedirectWithFlash')) {
-    function studentCommunityRedirectWithFlash(string $type, string $message): void
-    {
-        $_SESSION['student_community_flash'] = [
-            'type' => $type,
-            'message' => $message,
-        ];
+    function studentCommunityRedirectWithFlash(string $type, string $message): void {
+        $_SESSION['student_community_flash'] = ['type' => $type, 'message' => $message];
         header('Location: community.php');
         exit();
     }
 }
 
-// Delete expired posts
 $conn->query("DELETE FROM posts WHERE expires_at < NOW()");
 
-// Handle post deletion
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_post'])) {
     $postId = (int)$_POST['post_id'];
-    // Only allow deleting own posts
     $stmt = $conn->prepare("DELETE FROM posts WHERE post_id = ? AND user_id = ?");
     $stmt->bind_param("ii", $postId, $studentUserId);
-    if ($stmt->execute() && $stmt->affected_rows > 0) {
-        studentCommunityRedirectWithFlash('success', 'Post deleted successfully!');
-    } else {
-        studentCommunityRedirectWithFlash('error', 'Failed to delete post or post not found.');
-    }
+    if ($stmt->execute() && $stmt->affected_rows > 0) studentCommunityRedirectWithFlash('success', 'Post deleted successfully!');
+    else studentCommunityRedirectWithFlash('error', 'Failed to delete post or post not found.');
     $stmt->close();
 }
 
-// Handle new post submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_post'])) {
     $scope = $_POST['scope'] ?? 'department';
     $content = trim($_POST['postContent'] ?? '');
@@ -58,596 +43,368 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_post'])) {
     $includeText = isset($_POST['include_text']);
     $includeImage = isset($_POST['include_image']);
 
-    // Validate
-    if (!$includeText && !$includeImage) {
-        $error = "Please select at least one content type.";
-    } elseif ($includeText && empty($content)) {
-        $error = "Please write a message for the post.";
-    } elseif ($includeImage && (!isset($_FILES['postImage']) || $_FILES['postImage']['error'] == UPLOAD_ERR_NO_FILE)) {
-        $error = "Please select an image to upload.";
-    } else {
-        $imageData = null;
-        $imageType = null;
-        $imageSize = null;
-
-        // Handle image upload
+    if (!$includeText && !$includeImage) $error = "Please select at least one content type.";
+    elseif ($includeText && empty($content)) $error = "Please write a message for the post.";
+    elseif ($includeImage && (!isset($_FILES['postImage']) || $_FILES['postImage']['error'] == UPLOAD_ERR_NO_FILE)) $error = "Please select an image to upload.";
+    else {
+        $imageData = null; $imageType = null; $imageSize = null;
         if ($includeImage && isset($_FILES['postImage']) && $_FILES['postImage']['error'] == UPLOAD_ERR_OK) {
-            $maxSize = 2 * 1024 * 1024; // 2MB
+            $maxSize = 2 * 1024 * 1024;
             $allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-
-            if ($_FILES['postImage']['size'] > $maxSize) {
-                $error = "Image must be under 2MB.";
-            } elseif (!in_array($_FILES['postImage']['type'], $allowedTypes)) {
-                $error = "Only JPG, PNG, and GIF images are allowed.";
-            } else {
+            if ($_FILES['postImage']['size'] > $maxSize) $error = "Image must be under 2MB.";
+            elseif (!in_array($_FILES['postImage']['type'], $allowedTypes)) $error = "Only JPG, PNG, and GIF images are allowed.";
+            else {
                 $imageData = file_get_contents($_FILES['postImage']['tmp_name']);
                 $imageType = $_FILES['postImage']['type'];
                 $imageSize = $_FILES['postImage']['size'];
             }
         }
-
         if (empty($error)) {
             $expiresAt = date('Y-m-d H:i:s', strtotime("+$expiresIn days"));
             $userId = $studentUserId;
-
             $stmt = $conn->prepare("INSERT INTO posts (user_id, content, image_data, image_type, image_size, scope, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $stmt->bind_param("isssiss", $userId, $content, $imageData, $imageType, $imageSize, $scope, $expiresAt);
-
-            if ($stmt->execute()) {
-                studentCommunityRedirectWithFlash('success', "Post created successfully! It will expire in $expiresIn days.");
-            } else {
-                $error = "Failed to create post: " . $conn->error;
-            }
+            if ($stmt->execute()) studentCommunityRedirectWithFlash('success', "Post created successfully! It will expire in $expiresIn days.");
+            else $error = "Failed to create post: " . $conn->error;
             $stmt->close();
         }
     }
-
-    // If we reach here with an error, redirect with flash
-    if ($error !== '') {
-        studentCommunityRedirectWithFlash('error', $error);
-    }
+    if ($error !== '') studentCommunityRedirectWithFlash('error', $error);
 }
 
-// Fetch student data
 $stmt = $conn->prepare("SELECT s.name, s.Roll_no, s.department, s.session FROM student s WHERE s.student_id = ?");
 $stmt->bind_param("i", $_SESSION['student_id']);
 $stmt->execute();
-$result = $stmt->get_result();
-$student = $result->fetch_assoc();
+$student = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 $studentDepartment = trim((string)($student['department'] ?? ''));
 $studentDepartmentNormalized = mb_strtolower($studentDepartment);
 
-// Fetch posts: Only APPROVED posts - All university posts OR department-only posts from same department
 $posts = [];
-$stmt = $conn->prepare("SELECT p.*, u.email, 
-                        COALESCE(s.name, t.name) as poster_name,
-                        s.Roll_no as poster_roll,
-                        COALESCE(s.department, t.department) as poster_department
-                        FROM posts p 
-                        LEFT JOIN user u ON p.user_id = u.user_id 
-                        LEFT JOIN student s ON p.user_id = s.student_id
-                        LEFT JOIN teacher t ON p.user_id = t.teacher_id
-                        WHERE p.expires_at > NOW() 
-                        AND p.status = 'approved'
-                        AND (p.scope = 'all' OR (p.scope = 'department' AND (LOWER(TRIM(s.department)) = ? OR LOWER(TRIM(t.department)) = ?)))
-                        ORDER BY p.created_at DESC");
+$stmt = $conn->prepare("SELECT p.*, u.email, COALESCE(s.name, t.name) as poster_name, s.Roll_no as poster_roll, COALESCE(s.department, t.department) as poster_department
+    FROM posts p LEFT JOIN user u ON p.user_id = u.user_id LEFT JOIN student s ON p.user_id = s.student_id LEFT JOIN teacher t ON p.user_id = t.teacher_id
+    WHERE p.expires_at > NOW() AND p.status = 'approved'
+    AND (p.scope = 'all' OR (p.scope = 'department' AND (LOWER(TRIM(s.department)) = ? OR LOWER(TRIM(t.department)) = ?)))
+    ORDER BY p.created_at DESC");
 $stmt->bind_param("ss", $studentDepartmentNormalized, $studentDepartmentNormalized);
 $stmt->execute();
 $result = $stmt->get_result();
-if ($result) {
-    while ($row = $result->fetch_assoc()) {
-        $posts[] = $row;
-    }
-}
+if ($result) while ($row = $result->fetch_assoc()) $posts[] = $row;
 $stmt->close();
 
-// Fetch user's own posts for delete dropdown
 $userPosts = [];
 $stmt = $conn->prepare("SELECT post_id, content, created_at FROM posts WHERE user_id = ? AND expires_at > NOW() ORDER BY created_at DESC");
 $stmt->bind_param("i", $studentUserId);
 $stmt->execute();
 $userPostsResult = $stmt->get_result();
-while ($row = $userPostsResult->fetch_assoc()) {
-    $userPosts[] = $row;
-}
+while ($row = $userPostsResult->fetch_assoc()) $userPosts[] = $row;
 $stmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Community - Student Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>EduCompliance - Student Community Feed</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: {
+                colors: {
+                    'error': '#ba1a1a', 'secondary': '#0040e0', 'on-secondary-fixed-variant': '#0035be',
+                    'on-primary-container': '#7c839b', 'surface-container-low': '#f6f3f5',
+                    'outline-variant': '#c6c6cd', 'on-surface': '#1b1b1d', 'on-surface-variant': '#45464d',
+                    'error-container': '#ffdad6', 'on-error-container': '#93000a', 'primary-container': '#131b2e'
+                },
+                fontFamily: {
+                    h3: ['Sora','sans-serif'], h2: ['Sora','sans-serif'], h1: ['Sora','sans-serif'],
+                    'label-caps': ['Sora','sans-serif'], 'body-md': ['Source Sans 3','sans-serif'],
+                    'body-sm': ['Source Sans 3','sans-serif'], 'data-tabular': ['Source Sans 3','sans-serif']
+                }
+            }}
+        };
+    </script>
     <style>
-        body {
-            padding-top: 56px;
-        }
-
-        @media (min-width: 992px) {
-            body {
-                padding-top: 70px;
-            }
-
-            #sidebar {
-                position: fixed;
-                top: 0;
-                left: 0;
-                z-index: 1040;
-            }
-
-            main {
-                margin-left: 250px;
-                width: calc(100% - 250px);
-            }
-        }
-
-        /* 1366x768 and similar laptop screens */
-        @media (min-width: 992px) and (max-width: 1399px) {
-            .navbar .d-flex.text-white {
-                font-size: 0.85rem;
-                gap: 0.5rem !important;
-            }
-
-            main .container-fluid {
-                padding-left: 1rem;
-                padding-right: 1rem;
-            }
-
-            .col-lg-8 {
-                flex: 0 0 auto;
-                width: 60%;
-            }
-
-            .col-lg-4 {
-                flex: 0 0 auto;
-                width: 40%;
-            }
-        }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        body { background-color: #F8FAFC; }
     </style>
 </head>
+<body class="font-body-md text-on-surface">
 
-<body class="bg-light">
-    <!-- Navbar -->
-    <nav class="navbar navbar-dark bg-primary fixed-top d-none d-lg-flex"
-        style="left: 250px; width: calc(100% - 250px);">
-        <div class="container-fluid justify-content-center">
-            <div class="d-flex text-white gap-3 flex-wrap justify-content-center">
-                <span><strong>Name:</strong> <?php echo htmlspecialchars($student['name']); ?></span>
-                <span>|</span>
-                <span><strong>Roll No:</strong> <?php echo htmlspecialchars($student['Roll_no']); ?></span>
-                <span>|</span>
-                <span><strong>Department:</strong> <?php echo htmlspecialchars($student['department']); ?></span>
-                <span>|</span>
-                <span><strong>Session:</strong> <?php echo htmlspecialchars($student['session']); ?></span>
+<!-- Sidebar -->
+<aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 shadow-xl shadow-black/20 flex flex-col z-50">
+    <div class="p-6">
+        <div class="flex items-center gap-3 mb-8">
+            <div class="w-10 h-10 bg-blue-600 rounded flex items-center justify-center">
+                <span class="material-symbols-outlined text-white">school</span>
+            </div>
+            <div>
+                <h1 class="text-white text-xl font-bold tracking-tight font-h3 leading-tight">EduCompliance</h1>
+                <p class="text-slate-400 text-xs">Academic Administration</p>
             </div>
         </div>
-    </nav>
-    <!-- Mobile Navbar -->
-    <nav class="navbar navbar-dark bg-primary fixed-top d-lg-none" style="left: 0; width: 100%;">
-        <div class="container-fluid">
-            <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <span class="navbar-brand mb-0">Student Dashboard</span>
-        </div>
-    </nav>
+        <nav class="space-y-1">
+            <a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-h3 text-sm" href="dashboard.php">
+                <span class="material-symbols-outlined">dashboard</span>Dashboard
+            </a>
+            <a class="flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 border-l-4 border-blue-600 transition-all font-h3 text-sm" href="community.php">
+                <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">campaign</span>Community
+            </a>
+            <a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-h3 text-sm" href="settings.php">
+                <span class="material-symbols-outlined">settings</span>Settings
+            </a>
+        </nav>
+    </div>
+    <div class="mt-auto p-6 border-t border-slate-800">
+        <a href="../logout.php" class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-h3 text-sm">
+            <span class="material-symbols-outlined">logout</span>Logout
+        </a>
+    </div>
+</aside>
 
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar - Offcanvas on mobile, fixed on desktop -->
-            <div class="offcanvas-lg offcanvas-start bg-dark text-white" tabindex="-1" id="sidebar"
-                style="width: 250px; height: 100vh;">
-                <div class="offcanvas-header">
-                    <h5 class="offcanvas-title">Menu</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"
-                        data-bs-target="#sidebar"></button>
-                </div>
-                <div class="offcanvas-body d-flex flex-column p-3">
-                    <h4 class="mb-4"><a href="dashboard.php" class="text-white text-decoration-none">Student
-                            Dashboard</a></h4>
-                    <nav class="nav flex-column">
-                        <a class="nav-link text-white mb-2" href="dashboard.php"><i
-                                class="fas fa-bell me-2"></i>Notifications</a>
-                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="community.php"><i
-                                class="fas fa-users me-2"></i>Community</a>
-                        <a class="nav-link text-white mb-2" href="settings.php"><i
-                                class="fas fa-cog me-2"></i>Settings</a>
-                        <button class="nav-link btn btn-link text-white text-start mb-2" id="logout-btn"><i
-                                class="fas fa-sign-out-alt me-2"></i>Log out</button>
-                    </nav>
-                </div>
-            </div>
-
-            <!-- Main Content -->
-            <main class="col-lg-9 col-xl-10 ms-lg-auto px-md-4">
-                <div class="container-fluid py-4">
-                    <?php if ($error): ?>
-                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                            <?php echo htmlspecialchars($error); ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    <?php endif; ?>
-
-                    <?php if ($success): ?>
-                        <div class="alert alert-success alert-dismissible fade show" role="alert">
-                            <?php echo htmlspecialchars($success); ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    <?php endif; ?>
-
-                    <!-- Action Bar -->
-                    <div class="d-flex flex-wrap gap-2 mb-4">
-                        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addPostModal">
-                            <i class="fas fa-plus"></i> Add Post
-                        </button>
-                        <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deletePostModal">
-                            <i class="fas fa-trash"></i> Delete Post
-                        </button>
-                    </div>
-
-                    <!-- Delete Post Modal -->
-                    <div class="modal fade" id="deletePostModal" tabindex="-1" aria-labelledby="deletePostModalLabel"
-                        aria-hidden="true">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header bg-danger text-white">
-                                    <h5 class="modal-title" id="deletePostModalLabel"><i
-                                            class="fas fa-trash-alt me-2"></i>Delete Post</h5>
-                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                                        aria-label="Close"></button>
-                                </div>
-                                <form method="POST" action="">
-                                    <div class="modal-body">
-                                        <div class="mb-3">
-                                            <label for="selectPostToDelete" class="form-label fw-bold">Select a post to
-                                                delete:</label>
-                                            <select class="form-select" id="selectPostToDelete" name="post_id" required>
-                                                <option value="" selected disabled>-- Choose a post --</option>
-                                                <?php foreach ($userPosts as $userPost): ?>
-                                                    <option value="<?php echo $userPost['post_id']; ?>">
-                                                        <?php
-                                                        $preview = !empty($userPost['content']) ? substr($userPost['content'], 0, 50) : '[Image Post]';
-                                                        echo htmlspecialchars($preview) . (strlen($userPost['content']) > 50 ? '...' : '');
-                                                        ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                                <?php if (empty($userPosts)): ?>
-                                                    <option value="" disabled>No posts to delete</option>
-                                                <?php endif; ?>
-                                            </select>
-                                        </div>
-                                        <div id="deleteConfirmSection" class="d-none">
-                                            <div class="alert alert-warning">
-                                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                                <strong>Are you sure?</strong> This action cannot be undone.
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary"
-                                            data-bs-dismiss="modal">Cancel</button>
-                                        <button type="submit" name="delete_post" class="btn btn-danger" id="confirmDeletePost" <?php echo empty($userPosts) ? 'disabled' : ''; ?>>
-                                            <i class="fas fa-trash me-1"></i> Delete Post
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Add Post Modal -->
-                    <div class="modal fade" id="addPostModal" tabindex="-1" aria-labelledby="addPostModalLabel"
-                        aria-hidden="true">
-                        <div class="modal-dialog modal-lg">
-                            <div class="modal-content">
-                                <div class="modal-header bg-primary text-white">
-                                    <h5 class="modal-title" id="addPostModalLabel"><i
-                                            class="fas fa-plus-circle me-2"></i>Create New Post</h5>
-                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                                        aria-label="Close"></button>
-                                </div>
-                                <form id="addPostForm" method="POST" enctype="multipart/form-data">
-                                    <div class="modal-body">
-                                        <!-- Post Visibility -->
-                                        <div class="mb-3">
-                                            <label class="form-label fw-bold">Post Visibility</label>
-                                            <div class="d-flex flex-wrap gap-3">
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="radio" name="scope" id="scopeDept" value="department" checked>
-                                                    <label class="form-check-label" for="scopeDept">Department only</label>
-                                                </div>
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="radio" name="scope" id="scopeAll" value="all">
-                                                    <label class="form-check-label" for="scopeAll">All University</label>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <!-- Post Expiration -->
-                                        <div class="mb-3">
-                                            <label class="form-label fw-bold">Post Expiration</label>
-                                            <select name="expires_in" class="form-select" style="max-width: 250px;">
-                                                <option value="7">Delete after 7 days</option>
-                                                <option value="15" selected>Delete after 15 days</option>
-                                                <option value="30">Delete after 30 days</option>
-                                            </select>
-                                            <div class="form-text">Post will be automatically deleted after this period.</div>
-                                        </div>
-
-                                        <!-- Post Type Selection -->
-                                        <div class="mb-4">
-                                            <label class="form-label fw-bold">What would you like to post?</label>
-                                            <div class="d-flex flex-wrap gap-2">
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="includeText" name="include_text" checked>
-                                                    <label class="form-check-label" for="includeText">
-                                                        <i class="fas fa-pen me-1"></i> Write Something
-                                                    </label>
-                                                </div>
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="includeImage" name="include_image">
-                                                    <label class="form-check-label" for="includeImage">
-                                                        <i class="fas fa-image me-1"></i> Upload Image
-                                                    </label>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <!-- Text Content Section -->
-                                        <div class="mb-3" id="textSection">
-                                            <label for="postContent" class="form-label fw-bold">Your Message</label>
-                                            <textarea class="form-control" id="postContent" name="postContent" rows="4"
-                                                placeholder="What's on your mind?"></textarea>
-                                        </div>
-
-                                        <!-- Image Upload Section -->
-                                        <div class="mb-3 d-none" id="imageSection">
-                                            <label for="postImage" class="form-label fw-bold">Upload Image</label>
-                                            <input class="form-control" type="file" id="postImage" name="postImage" accept="image/*">
-                                            <div class="form-text">Accepted formats: JPG, PNG, GIF (Max 2MB)</div>
-                                            <!-- Image Preview -->
-                                            <div id="imagePreview" class="mt-3 d-none">
-                                                <img src="" alt="Preview" class="img-fluid rounded"
-                                                    style="max-height: 200px;">
-                                                <button type="button" class="btn btn-sm btn-outline-danger mt-2"
-                                                    id="removeImage">
-                                                    <i class="fas fa-times"></i> Remove
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary"
-                                            data-bs-dismiss="modal">Cancel</button>
-                                        <button type="submit" name="create_post" class="btn btn-success" id="submitPost">
-                                            <i class="fas fa-paper-plane me-1"></i> Send for Approval
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Main Content Grid -->
-                    <div class="row">
-                        <!-- Posts Section -->
-                        <div class="col-lg-8 mb-4">
-                            <div class="card shadow-sm h-100">
-                                <div
-                                    class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                                    <h3 class="mb-0 h5">Recent Posts</h3>
-                                </div>
-                                <div class="card-body">
-                                    <?php if (empty($posts)): ?>
-                                        <div class="alert alert-info">
-                                            No posts yet. Click "Add Post" to create one.
-                                        </div>
-                                    <?php else: ?>
-                                        <?php foreach ($posts as $post): ?>
-                                            <div class="card mb-3 shadow-sm">
-                                                <div class="card-body">
-                                                    <?php if (!empty($post['content'])): ?>
-                                                        <p class="mb-2"><?php echo nl2br(htmlspecialchars($post['content'])); ?></p>
-                                                    <?php endif; ?>
-
-                                                    <?php if (!empty($post['image_data'])): ?>
-                                                        <div class="mb-2">
-                                                            <img src="data:<?php echo $post['image_type']; ?>;base64,<?php echo base64_encode($post['image_data']); ?>"
-                                                                class="img-fluid rounded" style="max-height: 300px;">
-                                                        </div>
-                                                    <?php endif; ?>
-
-                                                    <div class="d-flex flex-wrap justify-content-between align-items-center mt-2">
-                                                        <small class="text-muted">
-                                                            <i class="fas fa-user me-1"></i>
-                                                            <?php echo htmlspecialchars($post['poster_name'] ?? 'Unknown'); ?>
-                                                            <?php if (!empty($post['poster_roll'])): ?>
-                                                                (<?php echo htmlspecialchars($post['poster_roll']); ?>)
-                                                            <?php endif; ?>
-                                                        </small>
-                                                        <small class="text-muted">
-                                                            <i class="fas fa-globe me-1"></i>
-                                                            <?php echo $post['scope'] == 'all' ? 'All University' : 'Department Only'; ?>
-                                                        </small>
-                                                    </div>
-                                                    <div class="d-flex flex-wrap justify-content-between align-items-center mt-1">
-                                                        <small class="text-muted">
-                                                            <i class="fas fa-calendar me-1"></i>
-                                                            <?php echo date('M d, Y h:i A', strtotime($post['created_at'])); ?>
-                                                        </small>
-                                                        <small>
-                                                            <?php
-                                                            $daysLeft = ceil((strtotime($post['expires_at']) - time()) / 86400);
-                                                            $badgeClass = $daysLeft <= 3 ? 'bg-warning text-dark' : 'bg-secondary';
-                                                            ?>
-                                                            <span class="badge <?php echo $badgeClass; ?>">
-                                                                <i class="fas fa-clock me-1"></i>Expires in <?php echo $daysLeft; ?> day<?php echo $daysLeft != 1 ? 's' : ''; ?>
-                                                            </span>
-                                                        </small>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Activity Sidebar -->
-                        <div class="col-lg-4 mb-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-header">
-                                    <h4 class="mb-0 h5">Your Posts</h4>
-                                </div>
-                                <div class="card-body">
-                                    <?php if (empty($userPosts)): ?>
-                                        <p class="text-muted">You haven't posted anything yet.</p>
-                                    <?php else: ?>
-                                        <ul class="list-group list-group-flush">
-                                            <?php foreach ($userPosts as $userPost): ?>
-                                                <li class="list-group-item">
-                                                    <small class="text-muted"><?php echo date('M d', strtotime($userPost['created_at'])); ?>:</small>
-                                                    <?php
-                                                    $preview = !empty($userPost['content']) ? substr($userPost['content'], 0, 40) : '[Image Post]';
-                                                    echo htmlspecialchars($preview) . (strlen($userPost['content']) > 40 ? '...' : '');
-                                                    ?>
-                                                </li>
-                                            <?php endforeach; ?>
-                                        </ul>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </main>
+<!-- Top Bar -->
+<header class="fixed top-0 right-0 left-[280px] h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-8 z-40 shadow-sm">
+    <div class="flex items-center gap-4 flex-1">
+        <div class="relative w-full max-w-md">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+            <input class="w-full bg-white border border-slate-200 rounded-lg py-2 pl-10 pr-4 text-sm focus:ring-2 ring-blue-500/20 outline-none" placeholder="Search notices, students, or records..." type="text">
         </div>
     </div>
+    <div class="flex items-center gap-4">
+        <button class="hover:bg-slate-100 rounded-lg p-2 transition-all relative">
+            <span class="material-symbols-outlined text-slate-600">notifications</span>
+        </button>
+        <div class="h-8 w-[1px] bg-slate-200"></div>
+        <div class="flex items-center gap-3">
+            <div class="text-right">
+                <p class="text-sm font-bold text-slate-900 leading-none"><?php echo htmlspecialchars($student['name']); ?></p>
+                <p class="text-[10px] font-label-caps text-blue-600 uppercase mt-1">STUDENT · <?php echo htmlspecialchars($student['Roll_no']); ?></p>
+            </div>
+            <div class="w-9 h-9 rounded-full bg-secondary flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm">
+                <?php echo strtoupper(substr($student['name'], 0, 1)); ?>
+            </div>
+        </div>
+    </div>
+</header>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../logout.php';
-        });
+<!-- Main Content -->
+<main class="ml-[280px] mt-16 p-6">
+    <div class="max-w-5xl mx-auto space-y-6">
 
-        // Toggle text section visibility
-        document.getElementById('includeText').addEventListener('change', function() {
-            const textSection = document.getElementById('textSection');
-            if (this.checked) {
-                textSection.classList.remove('d-none');
-            } else {
-                textSection.classList.add('d-none');
-            }
-        });
+        <!-- Flash Messages -->
+        <?php if ($error): ?>
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+            <span class="material-symbols-outlined text-error" style="font-variation-settings: 'FILL' 1;">error</span>
+            <p class="text-red-800 font-body-sm"><?php echo htmlspecialchars($error); ?></p>
+        </div>
+        <?php endif; ?>
+        <?php if ($success): ?>
+        <div class="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
+            <span class="material-symbols-outlined text-emerald-600" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+            <p class="text-emerald-800 font-body-sm"><?php echo htmlspecialchars($success); ?></p>
+        </div>
+        <?php endif; ?>
 
-        // Toggle image section visibility
-        document.getElementById('includeImage').addEventListener('change', function() {
-            const imageSection = document.getElementById('imageSection');
-            if (this.checked) {
-                imageSection.classList.remove('d-none');
-            } else {
-                imageSection.classList.add('d-none');
-                // Clear image input and preview when hidden
-                document.getElementById('postImage').value = '';
-                document.getElementById('imagePreview').classList.add('d-none');
-            }
-        });
+        <!-- Page Header -->
+        <div class="flex items-end justify-between">
+            <div>
+                <h2 class="font-h1 text-3xl font-bold text-slate-900">Community Feed</h2>
+                <p class="font-body-md text-slate-500 mt-1">Institutional updates and student-led community discussions.</p>
+            </div>
+            <span class="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
+                <span class="material-symbols-outlined text-xs mr-1" style="font-variation-settings: 'FILL' 1;">check_circle</span>Verified Student
+            </span>
+        </div>
 
-        // Image preview functionality
-        document.getElementById('postImage').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const imagePreview = document.getElementById('imagePreview');
-            const previewImg = imagePreview.querySelector('img');
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Left: Create Post & Stats -->
+            <div class="lg:col-span-4 space-y-6">
+                <!-- Create Post -->
+                <section class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                    <h3 class="font-h3 text-lg text-slate-900 mb-4 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-blue-600">edit_square</span>New Post
+                    </h3>
+                    <form method="POST" enctype="multipart/form-data" id="addPostForm" class="space-y-4">
+                        <textarea name="postContent" id="postContent" class="w-full min-h-[100px] rounded-lg border border-slate-200 font-body-sm text-sm resize-none p-3 placeholder:text-slate-400 focus:ring-2 ring-blue-500/20 outline-none" placeholder="What's happening on campus?"></textarea>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[10px] font-label-caps text-slate-500 mb-1">Post Scope</label>
+                                <select name="scope" class="w-full text-sm rounded-lg border border-slate-200 py-1.5 focus:ring-2 ring-blue-500/20 outline-none">
+                                    <option value="department">Department Only</option>
+                                    <option value="all">All University</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-label-caps text-slate-500 mb-1">Expiry</label>
+                                <select name="expires_in" class="w-full text-sm rounded-lg border border-slate-200 py-1.5 focus:ring-2 ring-blue-500/20 outline-none">
+                                    <option value="7">7 Days</option>
+                                    <option value="15" selected>15 Days</option>
+                                    <option value="30">30 Days</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 text-sm">
+                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" name="include_text" id="includeText" checked class="rounded"> Text
+                            </label>
+                            <label class="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" name="include_image" id="includeImage" class="rounded"> Image
+                            </label>
+                        </div>
+                        <div id="imageSection" class="hidden">
+                            <input type="file" name="postImage" id="postImage" accept="image/*" class="w-full text-sm border border-slate-200 rounded-lg p-2">
+                            <div id="imagePreview" class="mt-2 hidden">
+                                <img src="" alt="Preview" class="rounded max-h-32 object-cover">
+                                <button type="button" id="removeImage" class="text-xs text-red-600 mt-1">Remove</button>
+                            </div>
+                        </div>
+                        <button type="submit" name="create_post" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-h3 text-sm px-4 py-2.5 rounded-lg transition-all shadow-md shadow-blue-600/20">
+                            Post Update
+                        </button>
+                    </form>
+                </section>
 
-            if (file) {
-                // Validate file type
-                if (!file.type.startsWith('image/')) {
-                    alert('Please select an image file.');
-                    this.value = '';
-                    return;
-                }
+                <!-- Stats Card -->
+                <div class="bg-[#0F172A] rounded-xl p-6 text-white overflow-hidden relative">
+                    <div class="relative z-10">
+                        <h4 class="font-h3 text-sm opacity-80 mb-4">Feed Overview</h4>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                                <span class="text-xs">Active Posts</span>
+                                <span class="font-bold text-blue-400"><?php echo count($posts); ?></span>
+                            </div>
+                            <div class="flex justify-between items-center border-b border-slate-700 pb-3">
+                                <span class="text-xs">Your Posts</span>
+                                <span class="font-bold text-emerald-400"><?php echo count($userPosts); ?></span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs">Department</span>
+                                <span class="font-bold text-slate-300 text-xs"><?php echo htmlspecialchars($student['department']); ?></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="absolute -right-4 -bottom-4 opacity-10">
+                        <span class="material-symbols-outlined text-[100px]">analytics</span>
+                    </div>
+                </div>
 
-                // Validate file size (2MB max)
-                if (file.size > 2 * 1024 * 1024) {
-                    alert('Image size must be less than 2MB.');
-                    this.value = '';
-                    return;
-                }
+                <!-- Your Posts (for deletion) -->
+                <?php if (!empty($userPosts)): ?>
+                <section class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                    <h3 class="font-h3 text-sm text-slate-900 mb-4 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-slate-500 text-lg">person</span>Your Posts
+                    </h3>
+                    <div class="space-y-2">
+                        <?php foreach ($userPosts as $userPost): ?>
+                        <form method="POST" onsubmit="return confirm('Delete this post? This cannot be undone.');">
+                            <input type="hidden" name="post_id" value="<?php echo $userPost['post_id']; ?>">
+                            <div class="flex items-center justify-between p-2 rounded-lg border border-slate-100 hover:bg-slate-50 gap-2">
+                                <p class="text-xs text-slate-600 truncate flex-1">
+                                    <?php
+                                    $preview = !empty($userPost['content']) ? substr($userPost['content'], 0, 40) : '[Image Post]';
+                                    echo htmlspecialchars($preview) . (strlen($userPost['content']) > 40 ? '...' : '');
+                                    ?>
+                                </p>
+                                <button type="submit" name="delete_post" class="text-red-400 hover:text-red-600 transition-colors flex-shrink-0">
+                                    <span class="material-symbols-outlined text-sm">delete</span>
+                                </button>
+                            </div>
+                        </form>
+                        <?php endforeach; ?>
+                    </div>
+                </section>
+                <?php endif; ?>
+            </div>
 
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    previewImg.src = e.target.result;
-                    imagePreview.classList.remove('d-none');
-                };
-                reader.readAsDataURL(file);
-            } else {
-                imagePreview.classList.add('d-none');
-            }
-        });
+            <!-- Right: Feed -->
+            <div class="lg:col-span-8 space-y-4">
+                <?php if (empty($posts)): ?>
+                <div class="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-sm">
+                    <span class="material-symbols-outlined text-slate-300 text-5xl mb-3 block">campaign</span>
+                    <p class="font-body-sm text-slate-500">No posts yet. Be the first to post!</p>
+                </div>
+                <?php else: ?>
+                <?php foreach ($posts as $post): ?>
+                <article class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                    <div class="p-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center text-secondary font-bold text-sm">
+                                    <?php echo strtoupper(substr($post['poster_name'] ?? 'U', 0, 1)); ?>
+                                </div>
+                                <div>
+                                    <h4 class="font-h3 text-sm text-slate-900">
+                                        <?php echo htmlspecialchars($post['poster_name'] ?? 'Unknown'); ?>
+                                        <?php if (!empty($post['poster_roll'])): ?>
+                                        <span class="ml-2 px-2 py-0.5 rounded bg-slate-100 text-[10px] text-slate-500 font-label-caps"><?php echo htmlspecialchars($post['poster_department'] ?? ''); ?></span>
+                                        <?php endif; ?>
+                                    </h4>
+                                    <div class="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                                        <span><?php echo date('M d, Y h:i A', strtotime($post['created_at'])); ?></span>
+                                        <span>•</span>
+                                        <span><?php echo $post['scope'] == 'all' ? 'All University' : 'Department Only'; ?></span>
+                                        <?php
+                                        $daysLeft = ceil((strtotime($post['expires_at']) - time()) / 86400);
+                                        $badgeColor = $daysLeft <= 3 ? 'text-red-500' : 'text-slate-400';
+                                        ?>
+                                        <span class="<?php echo $badgeColor; ?>">· Expires in <?php echo $daysLeft; ?>d</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <?php if (!empty($post['content'])): ?>
+                        <p class="font-body-md text-slate-700 leading-relaxed"><?php echo nl2br(htmlspecialchars($post['content'])); ?></p>
+                        <?php endif; ?>
+                        <?php if (!empty($post['image_data'])): ?>
+                        <div class="mt-4">
+                            <img src="data:<?php echo $post['image_type']; ?>;base64,<?php echo base64_encode($post['image_data']); ?>" class="w-full rounded-lg border border-slate-100 max-h-64 object-cover">
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </article>
+                <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</main>
 
-        // Remove image button
-        document.getElementById('removeImage').addEventListener('click', function() {
+<script>
+    document.getElementById('includeImage').addEventListener('change', function() {
+        document.getElementById('imageSection').classList.toggle('hidden', !this.checked);
+        if (!this.checked) {
             document.getElementById('postImage').value = '';
-            document.getElementById('imagePreview').classList.add('d-none');
-        });
+            document.getElementById('imagePreview').classList.add('hidden');
+        }
+    });
 
-        // Form validation before submit
-        document.getElementById('addPostForm').addEventListener('submit', function(e) {
-            const includeText = document.getElementById('includeText').checked;
-            const includeImage = document.getElementById('includeImage').checked;
-            const postContent = document.getElementById('postContent').value.trim();
-            const postImage = document.getElementById('postImage').files[0];
+    document.getElementById('postImage').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.size > 2 * 1024 * 1024) { alert('Image must be under 2MB.'); this.value = ''; return; }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.querySelector('#imagePreview img').src = e.target.result;
+                document.getElementById('imagePreview').classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+    });
 
-            if (!includeText && !includeImage) {
-                e.preventDefault();
-                alert('Please select at least one option: Write something or Upload an image.');
-                return;
-            }
+    document.getElementById('removeImage').addEventListener('click', function() {
+        document.getElementById('postImage').value = '';
+        document.getElementById('imagePreview').classList.add('hidden');
+    });
 
-            if (includeText && !postContent) {
-                e.preventDefault();
-                alert('Please write something to post.');
-                return;
-            }
-
-            if (includeImage && !postImage) {
-                e.preventDefault();
-                alert('Please select an image to upload.');
-                return;
-            }
-        });
-
-        // Reset form when modal is closed
-        document.getElementById('addPostModal').addEventListener('hidden.bs.modal', function() {
-            document.getElementById('addPostForm').reset();
-            document.getElementById('imagePreview').classList.add('d-none');
-            document.getElementById('imageSection').classList.add('d-none');
-            document.getElementById('textSection').classList.remove('d-none');
-            document.getElementById('includeText').checked = true;
-            document.getElementById('includeImage').checked = false;
-        });
-
-        // Delete Post - show warning when post is selected
-        document.getElementById('selectPostToDelete').addEventListener('change', function() {
-            const deleteConfirmSection = document.getElementById('deleteConfirmSection');
-            if (this.value) {
-                deleteConfirmSection.classList.remove('d-none');
-            } else {
-                deleteConfirmSection.classList.add('d-none');
-            }
-        });
-
-        // Reset delete modal when closed
-        document.getElementById('deletePostModal').addEventListener('hidden.bs.modal', function() {
-            document.getElementById('selectPostToDelete').value = '';
-            document.getElementById('deleteConfirmSection').classList.add('d-none');
-        });
-    </script>
+    document.getElementById('addPostForm').addEventListener('hidden', function() {
+        this.reset();
+        document.getElementById('imagePreview').classList.add('hidden');
+        document.getElementById('imageSection').classList.add('hidden');
+    });
+</script>
 </body>
-
 </html>
