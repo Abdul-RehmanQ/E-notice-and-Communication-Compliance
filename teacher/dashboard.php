@@ -11,21 +11,14 @@ $error = '';
 if (isset($_SESSION['teacher_flash']) && is_array($_SESSION['teacher_flash'])) {
     $flashType = $_SESSION['teacher_flash']['type'] ?? '';
     $flashMessage = $_SESSION['teacher_flash']['message'] ?? '';
-    if ($flashType === 'success') {
-        $success = (string)$flashMessage;
-    } elseif ($flashType === 'error') {
-        $error = (string)$flashMessage;
-    }
+    if ($flashType === 'success') $success = (string)$flashMessage;
+    elseif ($flashType === 'error') $error = (string)$flashMessage;
     unset($_SESSION['teacher_flash']);
 }
 
 if (!function_exists('teacherRedirectWithFlash')) {
-    function teacherRedirectWithFlash(string $type, string $message): void
-    {
-        $_SESSION['teacher_flash'] = [
-            'type' => $type,
-            'message' => $message,
-        ];
+    function teacherRedirectWithFlash(string $type, string $message): void {
+        $_SESSION['teacher_flash'] = ['type' => $type, 'message' => $message];
         header('Location: dashboard.php');
         exit();
     }
@@ -41,58 +34,37 @@ $assignedCourseStmt = $conn->prepare("SELECT DISTINCT co.offering_id, co.session
 $assignedCourseStmt->bind_param("i", $teacher['teacher_id']);
 $assignedCourseStmt->execute();
 $assignedCourseResult = $assignedCourseStmt->get_result();
-if ($assignedCourseResult) {
-    while ($row = $assignedCourseResult->fetch_assoc()) {
-        $assignedCourses[] = $row;
-    }
-}
+if ($assignedCourseResult) while ($row = $assignedCourseResult->fetch_assoc()) $assignedCourses[] = $row;
 $assignedCourseStmt->close();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification'])) {
     $selectedOfferingId = (int)($_POST['offering_id'] ?? 0);
     $message = trim($_POST['message'] ?? '');
 
-    if ($selectedOfferingId <= 0) {
-        $error = 'Please select a class offering.';
-    } elseif ($message === '') {
-        $error = 'Please enter a notification message.';
-    } elseif (mb_strlen($message) > 2000) {
-        $error = 'Message is too long. Maximum 2000 characters allowed.';
-    } else {
+    if ($selectedOfferingId <= 0) $error = 'Please select a class offering.';
+    elseif ($message === '') $error = 'Please enter a notification message.';
+    elseif (mb_strlen($message) > 2000) $error = 'Message is too long. Maximum 2000 characters allowed.';
+    else {
         $selectedCourse = null;
         foreach ($assignedCourses as $course) {
-            if ((int)$course['offering_id'] === $selectedOfferingId) {
-                $selectedCourse = $course;
-                break;
-            }
+            if ((int)$course['offering_id'] === $selectedOfferingId) { $selectedCourse = $course; break; }
         }
 
-        $assignmentCheckStmt = $conn->prepare("SELECT assignment_id
-                                               FROM teacher_course_assignments
-                                               WHERE teacher_id = ? AND offering_id = ?
-                                               LIMIT 1");
+        $assignmentCheckStmt = $conn->prepare("SELECT assignment_id FROM teacher_course_assignments WHERE teacher_id = ? AND offering_id = ? LIMIT 1");
         $assignmentCheckStmt->bind_param("ii", $teacher['teacher_id'], $selectedOfferingId);
         $assignmentCheckStmt->execute();
-        $assignmentCheckResult = $assignmentCheckStmt->get_result();
-        $isAssignedToOffering = $assignmentCheckResult && $assignmentCheckResult->num_rows > 0;
+        $isAssignedToOffering = $assignmentCheckStmt->get_result()->num_rows > 0;
         $assignmentCheckStmt->close();
 
         if (!$isAssignedToOffering) {
             $error = 'You can only send notifications for class offerings assigned to you.';
         } else {
             $recipientIds = [];
-            $recipientStmt = $conn->prepare("SELECT DISTINCT sce.student_id
-                                             FROM student_course_enrollments sce
-                                             WHERE sce.status = 'active'
-                                               AND sce.offering_id = ?");
+            $recipientStmt = $conn->prepare("SELECT DISTINCT sce.student_id FROM student_course_enrollments sce WHERE sce.status = 'active' AND sce.offering_id = ?");
             $recipientStmt->bind_param("i", $selectedOfferingId);
             $recipientStmt->execute();
             $recipientResult = $recipientStmt->get_result();
-            if ($recipientResult) {
-                while ($recipient = $recipientResult->fetch_assoc()) {
-                    $recipientIds[] = (int)$recipient['student_id'];
-                }
-            }
+            if ($recipientResult) while ($recipient = $recipientResult->fetch_assoc()) $recipientIds[] = (int)$recipient['student_id'];
             $recipientStmt->close();
 
             if (empty($recipientIds)) {
@@ -100,14 +72,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
             } else {
                 $insertStmt = $conn->prepare("INSERT INTO notifications (recipient_id, sender_id, message) VALUES (?, ?, ?)");
                 $insertedCount = 0;
-
                 foreach ($recipientIds as $recipientId) {
                     $insertStmt->bind_param("iis", $recipientId, $teacher['teacher_id'], $message);
-                    if ($insertStmt->execute()) {
-                        $insertedCount++;
-                    }
+                    if ($insertStmt->execute()) $insertedCount++;
                 }
-
                 $insertStmt->close();
 
                 if ($insertedCount > 0) {
@@ -123,14 +91,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_notification']))
         }
     }
 
-    if ($error !== '') {
-        teacherRedirectWithFlash('error', $error);
-    }
-
-    if ($success !== '') {
-        teacherRedirectWithFlash('success', $success);
-    }
-
+    if ($error !== '') teacherRedirectWithFlash('error', $error);
+    if ($success !== '') teacherRedirectWithFlash('success', $success);
     teacherRedirectWithFlash('error', 'Unable to process notification request.');
 }
 
@@ -140,352 +102,310 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification']
     if ($notificationIdToDelete <= 0) {
         $error = 'Please select a notification to delete.';
     } else {
-        $findStmt = $conn->prepare("SELECT message, created_at
-                                    FROM notifications
-                                    WHERE notification_id = ? AND sender_id = ?
-                                    LIMIT 1");
+        $findStmt = $conn->prepare("SELECT message, created_at FROM notifications WHERE notification_id = ? AND sender_id = ? LIMIT 1");
         $findStmt->bind_param("ii", $notificationIdToDelete, $teacher['teacher_id']);
         $findStmt->execute();
-        $findResult = $findStmt->get_result();
-        $batchToDelete = $findResult ? $findResult->fetch_assoc() : null;
+        $batchToDelete = $findStmt->get_result()->fetch_assoc();
         $findStmt->close();
 
         if (!$batchToDelete) {
             $error = 'Unable to delete the selected notification.';
         } else {
-            $deleteStmt = $conn->prepare("DELETE FROM notifications
-                                          WHERE sender_id = ? AND message = ? AND created_at = ?");
+            $deleteStmt = $conn->prepare("DELETE FROM notifications WHERE sender_id = ? AND message = ? AND created_at = ?");
             $deleteStmt->bind_param("iss", $teacher['teacher_id'], $batchToDelete['message'], $batchToDelete['created_at']);
             $deleteStmt->execute();
-
-            if ($deleteStmt->affected_rows > 0) {
-                $success = 'Notification deleted successfully.';
-            } else {
-                $error = 'Unable to delete the selected notification.';
-            }
-
+            if ($deleteStmt->affected_rows > 0) $success = 'Notification deleted successfully.';
+            else $error = 'Unable to delete the selected notification.';
             $deleteStmt->close();
         }
     }
 
-    if ($error !== '') {
-        teacherRedirectWithFlash('error', $error);
-    }
-
-    if ($success !== '') {
-        teacherRedirectWithFlash('success', $success);
-    }
-
+    if ($error !== '') teacherRedirectWithFlash('error', $error);
+    if ($success !== '') teacherRedirectWithFlash('success', $success);
     teacherRedirectWithFlash('error', 'Unable to process delete request.');
 }
 
 $sentNotifications = [];
 $sentStmt = $conn->prepare("SELECT MIN(n.notification_id) AS notification_id, n.message, n.created_at, COUNT(*) AS recipient_count
-                            FROM notifications n
-                            WHERE n.sender_id = ?
-                            GROUP BY n.message, n.created_at
-                            ORDER BY n.created_at DESC
-                            LIMIT 100");
+                            FROM notifications n WHERE n.sender_id = ?
+                            GROUP BY n.message, n.created_at ORDER BY n.created_at DESC LIMIT 100");
 $sentStmt->bind_param("i", $teacher['teacher_id']);
 $sentStmt->execute();
 $sentResult = $sentStmt->get_result();
-if ($sentResult) {
-    while ($row = $sentResult->fetch_assoc()) {
-        $sentNotifications[] = $row;
-    }
-}
+if ($sentResult) while ($row = $sentResult->fetch_assoc()) $sentNotifications[] = $row;
 $sentStmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teacher Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>Teacher Dashboard - EduCompliance</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: {
+                colors: {
+                    'error': '#ba1a1a', 'secondary': '#0040e0', 'secondary-container': '#2e5bff',
+                    'on-secondary-fixed-variant': '#0035be', 'on-primary-container': '#7c839b',
+                    'on-surface': '#1b1b1d', 'on-surface-variant': '#45464d',
+                    'error-container': '#ffdad6', 'on-error-container': '#93000a',
+                    'tertiary-fixed': '#6ffbbe', 'on-tertiary-fixed': '#002113',
+                    'on-tertiary-container': '#009668', 'surface-container-low': '#f6f3f5'
+                },
+                fontFamily: {
+                    h3: ['Sora','sans-serif'], h2: ['Sora','sans-serif'], h1: ['Sora','sans-serif'],
+                    'label-caps': ['Sora','sans-serif'], 'body-md': ['Source Sans 3','sans-serif'],
+                    'body-sm': ['Source Sans 3','sans-serif'], 'data-tabular': ['Source Sans 3','sans-serif']
+                }
+            }}
+        };
+    </script>
     <style>
-        body {
-            padding-top: 56px;
-        }
-
-        @media (min-width: 992px) {
-            body {
-                padding-top: 70px;
-            }
-
-            #sidebar {
-                position: fixed;
-                top: 0;
-                left: 0;
-                z-index: 1040;
-            }
-
-            main {
-                margin-left: 250px;
-                width: calc(100% - 250px);
-            }
-        }
-
-        /* 1366x768 and similar laptop screens */
-        @media (min-width: 992px) and (max-width: 1399px) {
-            .navbar .d-flex.text-white {
-                font-size: 0.85rem;
-                gap: 0.5rem !important;
-            }
-
-            main .container {
-                max-width: 100%;
-                padding-left: 1rem;
-                padding-right: 1rem;
-            }
-
-            .row.g-3 .col-md-3 {
-                flex: 0 0 auto;
-                width: 50%;
-            }
-        }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        body { background-color: #F8FAFC; }
     </style>
 </head>
+<body class="font-body-md text-on-surface">
 
-<body class="bg-light">
-    <!-- Navbar -->
-    <nav class="navbar navbar-dark bg-primary fixed-top d-none d-lg-flex"
-        style="left: 250px; width: calc(100% - 250px);">
-        <div class="container-fluid justify-content-center">
-            <div class="d-flex text-white gap-3 flex-wrap justify-content-center">
-                <span><strong>Teacher:</strong> <?php echo htmlspecialchars($teacher['name']); ?></span>
-                <span>|</span>
-                <span><strong>Department:</strong> <?php echo htmlspecialchars($teacher['department']); ?></span>
-            </div>
+<!-- Sidebar -->
+<aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl">
+    <div class="p-6 flex items-center gap-3">
+        <div class="w-10 h-10 bg-secondary-container rounded flex items-center justify-center">
+            <span class="material-symbols-outlined text-white">school</span>
         </div>
-    </nav>
-    <!-- Mobile Navbar -->
-    <nav class="navbar navbar-dark bg-primary fixed-top d-lg-none">
-        <div class="container-fluid">
-            <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <span class="navbar-brand mb-0">Teacher Dashboard</span>
-        </div>
-    </nav>
-
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar - Offcanvas on mobile, fixed on desktop -->
-            <div class="offcanvas-lg offcanvas-start bg-dark text-white" tabindex="-1" id="sidebar"
-                style="width: 250px; height: 100vh;">
-                <div class="offcanvas-header">
-                    <h5 class="offcanvas-title">Menu</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"
-                        data-bs-target="#sidebar"></button>
-                </div>
-                <div class="offcanvas-body d-flex flex-column p-3">
-                    <h4 class="mb-4"><a href="dashboard.php" class="text-white text-decoration-none">Teacher
-                            Dashboard</a></h4>
-                    <nav class="nav flex-column">
-                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="dashboard.php"><i
-                                class="fas fa-bell me-2"></i>Notifications</a>
-                        <a class="nav-link text-white mb-2" href="community.php"><i
-                                class="fas fa-users me-2"></i>Community</a>
-                        <a class="nav-link text-white mb-2" href="settings.php"><i
-                                class="fas fa-cog me-2"></i>Settings</a>
-                        <button class="nav-link btn btn-link text-white text-start mb-2" id="logout-btn"><i
-                                class="fas fa-sign-out-alt me-2"></i>Log out</button>
-                    </nav>
-                </div>
-            </div>
-
-            <!-- Main Content -->
-            <main class="col-lg-9 col-xl-10 ms-lg-auto px-md-4">
-                <div class="container py-4">
-                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-                        <h2 class="mb-0">Notifications</h2>
-                        <div class="d-flex flex-column flex-sm-row gap-2">
-                            <button class="btn btn-success" id="show-add-form">
-                                <i class="fas fa-plus me-1"></i>Add New Notification
-                            </button>
-                            <button class="btn btn-danger" id="show-delete-modal">
-                                <i class="fas fa-trash me-1"></i>Delete Notification
-                            </button>
-                        </div>
-                    </div>
-
-                    <?php if ($error): ?>
-                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                            <?php echo htmlspecialchars($error); ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    <?php endif; ?>
-
-                    <?php if ($success): ?>
-                        <div class="alert alert-success alert-dismissible fade show" role="alert">
-                            <?php echo htmlspecialchars($success); ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    <?php endif; ?>
-
-                    <!-- Add Notification Form -->
-                    <div class="card mb-4 d-none" id="add-notification-card">
-                        <div class="card-header">
-                            <h5 class="mb-0">New Notification</h5>
-                        </div>
-                        <div class="card-body">
-                            <form id="add-notification-form" method="POST" action="">
-                                <div class="mb-3">
-                                    <label for="offering_id" class="form-label">Assigned Class Offering</label>
-                                    <select class="form-select" id="offering_id" name="offering_id" required>
-                                        <option value="" selected disabled>Select assigned class offering</option>
-                                        <?php foreach ($assignedCourses as $course): ?>
-                                            <option value="<?php echo (int)$course['offering_id']; ?>">
-                                                <?php echo htmlspecialchars($course['course_code'] . ' - ' . $course['course_title']); ?>
-                                                | <?php echo htmlspecialchars($course['session']); ?>
-                                                | Sem <?php echo (int)$course['semester_no']; ?>
-                                                | Sec <?php echo htmlspecialchars($course['section']); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                    <?php if (empty($assignedCourses)): ?>
-                                        <div class="form-text text-danger">No assigned courses found. Ask admin to assign a course first.</div>
-                                    <?php endif; ?>
-                                </div>
-
-                                <div class="mb-3">
-                                    <label for="message" class="form-label">Message</label>
-                                    <textarea class="form-control" id="message" name="message" rows="4"
-                                        placeholder="Write your notification..." required></textarea>
-                                </div>
-
-                                <div class="d-flex justify-content-end gap-2">
-                                    <button type="button" class="btn btn-secondary" id="cancel-add">Cancel</button>
-                                    <button type="submit" name="send_notification" class="btn btn-success" <?php echo empty($assignedCourses) ? 'disabled' : ''; ?>>
-                                        <i class="fas fa-paper-plane me-1"></i>Send Notification
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-
-                    <!-- Notification History -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h5 class="mb-0">Notification History</h5>
-                        </div>
-                        <div class="card-body" id="notification-list">
-                            <?php if (empty($sentNotifications)): ?>
-                                <div class="alert alert-info" id="no-notifications-text">
-                                    No notifications yet. Click "Add New Notification" to create one.
-                                </div>
-                            <?php else: ?>
-                                <?php foreach ($sentNotifications as $notification): ?>
-                                    <div class="card mb-3 shadow-sm" data-notification-id="<?php echo (int)$notification['notification_id']; ?>">
-                                        <div class="card-body">
-                                            <p class="mb-2"><?php echo nl2br(htmlspecialchars($notification['message'])); ?></p>
-                                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                                <small class="text-muted">
-                                                    <i class="fas fa-users me-1"></i>Sent to: <?php echo (int)$notification['recipient_count']; ?> student(s)
-                                                </small>
-                                                <small class="text-muted">
-                                                    <i class="fas fa-clock me-1"></i><?php echo date('M d, Y h:i A', strtotime($notification['created_at'])); ?>
-                                                </small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-
-                    <!-- Delete Notification Modal -->
-                    <div class="modal fade" id="deleteNotificationModal" tabindex="-1"
-                        aria-labelledby="deleteNotificationModalLabel" aria-hidden="true">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <div class="modal-header bg-danger text-white">
-                                    <h5 class="modal-title" id="deleteNotificationModalLabel">
-                                        <i class="fas fa-trash-alt me-2"></i>Delete Notification
-                                    </h5>
-                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                                        aria-label="Close"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <form id="delete-notification-form" method="POST" action="">
-                                        <div class="mb-3">
-                                            <label for="selectNotificationToDelete" class="form-label fw-bold">Select a
-                                                notification to delete:</label>
-                                            <select class="form-select" id="selectNotificationToDelete" name="notification_id" required>
-                                                <option value="" selected disabled>-- Choose a notification --</option>
-                                                <?php foreach ($sentNotifications as $notification): ?>
-                                                    <option value="<?php echo (int)$notification['notification_id']; ?>">
-                                                        <?php
-                                                        $preview = mb_substr($notification['message'], 0, 60);
-                                                        $preview = mb_strlen($notification['message']) > 60 ? $preview . '...' : $preview;
-                                                        echo htmlspecialchars($preview . ' | ' . date('M d, Y h:i A', strtotime($notification['created_at'])));
-                                                        ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-                                    </form>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary"
-                                        data-bs-dismiss="modal">Cancel</button>
-                                    <button type="submit" form="delete-notification-form" name="delete_notification" class="btn btn-danger" id="confirmDeleteNotification"
-                                        <?php echo empty($sentNotifications) ? 'disabled' : ''; ?>>
-                                        <i class="fas fa-trash me-1"></i>Delete Selected
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </main>
+        <div>
+            <h1 class="text-white text-xl font-bold tracking-tight font-h1">EduCompliance</h1>
+            <p class="text-slate-400 text-xs font-label-caps">Academic Administration</p>
         </div>
     </div>
+    <nav class="flex-1 px-4 py-4 space-y-1">
+        <a class="flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 border-l-4 border-blue-600 transition-all font-h3 text-sm" href="dashboard.php">
+            <span class="material-symbols-outlined">dashboard</span>Dashboard
+        </a>
+        <a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-h3 text-sm" href="community.php">
+            <span class="material-symbols-outlined">campaign</span>Community
+        </a>
+        <a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-h3 text-sm" href="settings.php">
+            <span class="material-symbols-outlined">settings</span>Settings
+        </a>
+    </nav>
+    <div class="px-4 py-4 border-t border-slate-800">
+        <a href="../logout.php" class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-h3 text-sm">
+            <span class="material-symbols-outlined">logout</span>Logout
+        </a>
+    </div>
+</aside>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        const addCard = document.getElementById('add-notification-card');
-        const showAddFormBtn = document.getElementById('show-add-form');
-        const cancelAddBtn = document.getElementById('cancel-add');
-        const showDeleteModalBtn = document.getElementById('show-delete-modal');
-        const selectNotificationToDelete = document.getElementById('selectNotificationToDelete');
-        const confirmDeleteNotificationBtn = document.getElementById('confirmDeleteNotification');
+<!-- Top Bar -->
+<header class="fixed top-0 right-0 left-[280px] h-16 border-b border-slate-200 bg-[#F8FAFC] flex items-center justify-between px-8 z-40 shadow-sm">
+    <div class="flex items-center gap-4 w-1/3">
+        <div class="relative w-full">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+            <input class="w-full bg-white border border-slate-200 rounded-lg py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none font-body-sm" placeholder="Search records, notices, or students..." type="text">
+        </div>
+    </div>
+    <div class="flex items-center gap-6">
+        <div class="flex items-center gap-2">
+            <button class="hover:bg-slate-100 rounded-lg p-2 transition-all relative">
+                <span class="material-symbols-outlined text-slate-600">notifications</span>
+                <?php if (!empty($sentNotifications)): ?>
+                <span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+                <?php endif; ?>
+            </button>
+            <button class="hover:bg-slate-100 rounded-lg p-2 transition-all">
+                <span class="material-symbols-outlined text-slate-600">help_center</span>
+            </button>
+        </div>
+        <div class="h-8 w-[1px] bg-slate-200"></div>
+        <div class="flex items-center gap-3">
+            <div class="text-right">
+                <p class="text-slate-900 font-bold text-sm font-body-sm leading-tight"><?php echo htmlspecialchars($teacher['name']); ?></p>
+                <span class="text-[10px] font-label-caps bg-secondary/10 text-secondary px-2 py-0.5 rounded border border-secondary/20">FACULTY</span>
+            </div>
+            <div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm">
+                <?php echo strtoupper(substr($teacher['name'], 0, 1)); ?>
+            </div>
+        </div>
+    </div>
+</header>
 
-        // Show/hide add notification form
-        showAddFormBtn.addEventListener('click', () => {
-            addCard.classList.remove('d-none');
-            window.scrollTo({ top: addCard.offsetTop - 70, behavior: 'smooth' });
-        });
+<!-- Main Content -->
+<main class="ml-[280px] mt-16 p-8 min-h-screen">
+    <!-- Header -->
+    <div class="mb-8">
+        <h2 class="font-h2 text-2xl font-bold text-slate-900 mb-1">E-Notice Management</h2>
+        <p class="text-slate-500 font-body-sm">Broadcast critical academic updates and compliance notices to your assigned classes.</p>
+    </div>
 
-        cancelAddBtn.addEventListener('click', () => {
-            document.getElementById('add-notification-form').reset();
-            addCard.classList.add('d-none');
-        });
+    <!-- Flash Messages -->
+    <?php if ($error): ?>
+    <div class="mb-6 p-4 bg-error-container border-l-4 border-error flex gap-3 items-start rounded-r-lg">
+        <span class="material-symbols-outlined text-error" style="font-variation-settings: 'FILL' 1;">error</span>
+        <div>
+            <p class="font-data-tabular text-on-error-container font-semibold text-sm">Error</p>
+            <p class="font-body-sm text-sm text-on-error-container/90"><?php echo htmlspecialchars($error); ?></p>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php if ($success): ?>
+    <div class="mb-6 p-4 bg-emerald-50 border-l-4 border-emerald-500 flex gap-3 items-start rounded-r-lg">
+        <span class="material-symbols-outlined text-emerald-600" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+        <p class="text-emerald-800 font-body-sm font-medium"><?php echo htmlspecialchars($success); ?></p>
+    </div>
+    <?php endif; ?>
 
-        showDeleteModalBtn.addEventListener('click', () => {
-            if (!selectNotificationToDelete || selectNotificationToDelete.options.length <= 1) {
-                alert('There are no notifications to delete.');
-                return;
-            }
+    <div class="grid grid-cols-12 gap-8">
+        <!-- Left: Send Form -->
+        <div class="col-span-12 lg:col-span-5 space-y-6">
+            <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden border-t-4 border-t-secondary">
+                <div class="p-6 border-b border-slate-100">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="material-symbols-outlined text-secondary">send</span>
+                        <h3 class="font-h3 text-lg text-slate-900">Compose New Notice</h3>
+                    </div>
+                    <p class="text-xs text-slate-400 font-body-sm">Target specific enrolled classes with compliance updates.</p>
+                </div>
+                <form class="p-6 space-y-5" method="POST" action="">
+                    <div>
+                        <label class="block text-xs font-label-caps text-slate-500 mb-2">TARGET CLASS OFFERING</label>
+                        <select name="offering_id" class="w-full bg-white border border-slate-200 rounded-lg py-2.5 px-4 text-sm focus:ring-2 focus:ring-secondary/20 outline-none font-body-sm" required>
+                            <option value="" selected disabled>Select assigned class offering</option>
+                            <?php foreach ($assignedCourses as $course): ?>
+                            <option value="<?php echo (int)$course['offering_id']; ?>">
+                                <?php echo htmlspecialchars($course['course_code'] . ' - ' . $course['course_title']); ?>
+                                | <?php echo htmlspecialchars($course['session']); ?>
+                                | Sem <?php echo (int)$course['semester_no']; ?>
+                                | Sec <?php echo htmlspecialchars($course['section']); ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <?php if (empty($assignedCourses)): ?>
+                        <p class="text-xs text-error mt-1 font-body-sm">No assigned courses found. Ask admin to assign a course first.</p>
+                        <?php endif; ?>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-label-caps text-slate-500 mb-2">MESSAGE CONTENT</label>
+                        <textarea name="message" class="w-full bg-white border border-slate-200 rounded-lg py-2.5 px-4 text-sm focus:ring-2 focus:ring-secondary/20 outline-none font-body-sm resize-none" placeholder="Enter notice details here..." rows="5" required></textarea>
+                    </div>
+                    <button class="w-full bg-secondary text-white py-3 rounded-lg font-h3 text-sm font-semibold hover:bg-on-secondary-fixed-variant transition-all flex items-center justify-center gap-2 shadow-md shadow-blue-600/20 <?php echo empty($assignedCourses) ? 'opacity-50 cursor-not-allowed' : ''; ?>"
+                        type="submit" name="send_notification" <?php echo empty($assignedCourses) ? 'disabled' : ''; ?>>
+                        <span class="material-symbols-outlined text-lg">send</span>BROADCAST NOTICE
+                    </button>
+                </form>
+            </section>
 
-            const modal = new bootstrap.Modal(document.getElementById('deleteNotificationModal'));
-            modal.show();
-        });
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <p class="text-xs font-label-caps text-slate-400 mb-1">TOTAL SENT</p>
+                    <p class="text-2xl font-h1 font-bold text-slate-900"><?php echo count($sentNotifications); ?></p>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full mt-2">
+                        <div class="bg-secondary h-1.5 rounded-full" style="width: <?php echo min(100, count($sentNotifications) * 5); ?>%"></div>
+                    </div>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <p class="text-xs font-label-caps text-slate-400 mb-1">COURSES ASSIGNED</p>
+                    <p class="text-2xl font-h1 font-bold text-slate-900"><?php echo count($assignedCourses); ?></p>
+                    <p class="text-[10px] text-on-tertiary-container mt-2 flex items-center gap-1 font-body-sm">
+                        <span class="material-symbols-outlined text-[12px]">school</span>Active assignments
+                    </p>
+                </div>
+            </div>
+        </div>
 
-        if (selectNotificationToDelete && confirmDeleteNotificationBtn) {
-            selectNotificationToDelete.addEventListener('change', () => {
-                confirmDeleteNotificationBtn.disabled = !selectNotificationToDelete.value;
-            });
-        }
+        <!-- Right: History Table -->
+        <div class="col-span-12 lg:col-span-7">
+            <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                        <h3 class="font-h3 text-lg text-slate-900">Broadcast History</h3>
+                        <p class="text-xs text-slate-400 font-body-sm">Audit trail of all dispatched notifications.</p>
+                    </div>
+                    <!-- Delete form trigger -->
+                    <?php if (!empty($sentNotifications)): ?>
+                    <button onclick="document.getElementById('deletePanel').classList.toggle('hidden')"
+                        class="bg-error/10 text-error px-3 py-2 rounded-lg text-xs font-label-caps hover:bg-error hover:text-white transition-all flex items-center gap-2 border border-error/20">
+                        <span class="material-symbols-outlined text-[16px]">delete</span>DELETE
+                    </button>
+                    <?php endif; ?>
+                </div>
 
-        // Logout back to main index
-        document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../index.php';
-        });
-    </script>
+                <!-- Delete Panel -->
+                <?php if (!empty($sentNotifications)): ?>
+                <div id="deletePanel" class="hidden p-4 bg-slate-50 border-b border-slate-200">
+                    <form method="POST" class="flex items-center gap-3" onsubmit="return confirm('Delete this entire notification batch? This cannot be undone.');">
+                        <select name="notification_id" class="flex-1 text-sm border border-slate-200 rounded-lg py-2 px-3 focus:ring-2 focus:ring-secondary/20 outline-none" required>
+                            <option value="" disabled selected>-- Select notification to delete --</option>
+                            <?php foreach ($sentNotifications as $n): ?>
+                            <option value="<?php echo (int)$n['notification_id']; ?>">
+                                <?php
+                                $preview = mb_substr($n['message'], 0, 60);
+                                $preview = mb_strlen($n['message']) > 60 ? $preview . '...' : $preview;
+                                echo htmlspecialchars($preview . ' | ' . date('M d, Y', strtotime($n['created_at'])));
+                                ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button type="submit" name="delete_notification" class="px-4 py-2 bg-error text-white rounded-lg text-xs font-label-caps hover:opacity-90 transition-all">
+                            Confirm Delete
+                        </button>
+                    </form>
+                </div>
+                <?php endif; ?>
+
+                <div class="overflow-x-auto">
+                    <?php if (empty($sentNotifications)): ?>
+                    <div class="flex flex-col items-center justify-center py-16 text-center">
+                        <span class="material-symbols-outlined text-slate-300 text-5xl mb-3">notifications_none</span>
+                        <p class="font-body-sm text-slate-500">No notifications sent yet.</p>
+                    </div>
+                    <?php else: ?>
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50">
+                                <th class="px-6 py-4 font-label-caps text-[11px] text-slate-500 tracking-wider">NOTICE MESSAGE</th>
+                                <th class="px-6 py-4 font-label-caps text-[11px] text-slate-500 tracking-wider text-center">RECIPIENTS</th>
+                                <th class="px-6 py-4 font-label-caps text-[11px] text-slate-500 tracking-wider">TIMESTAMP</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <?php foreach ($sentNotifications as $notification): ?>
+                            <tr class="hover:bg-slate-50/50 transition-colors">
+                                <td class="px-6 py-4">
+                                    <p class="text-sm font-semibold text-slate-800 line-clamp-1"><?php echo htmlspecialchars(mb_substr($notification['message'], 0, 60)) . (mb_strlen($notification['message']) > 60 ? '...' : ''); ?></p>
+                                    <p class="text-xs text-slate-400 font-body-sm italic mt-0.5"><?php echo htmlspecialchars(mb_substr($notification['message'], 0, 80)); ?></p>
+                                </td>
+                                <td class="px-6 py-4 text-center">
+                                    <span class="inline-flex items-center gap-1 text-[10px] font-label-caps bg-tertiary-fixed text-on-tertiary-fixed px-2 py-1 rounded-full">
+                                        <span class="material-symbols-outlined text-[12px]">group</span>
+                                        <?php echo (int)$notification['recipient_count']; ?> STUDENTS
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <p class="text-[11px] font-data-tabular text-slate-600"><?php echo date('M d, Y', strtotime($notification['created_at'])); ?></p>
+                                    <p class="text-[10px] text-slate-400"><?php echo date('h:i A', strtotime($notification['created_at'])); ?></p>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <?php endif; ?>
+                </div>
+
+                <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between mt-auto">
+                    <p class="text-xs text-slate-500 font-body-sm">Showing <?php echo count($sentNotifications); ?> records</p>
+                    <div class="flex items-center gap-2 text-[10px] text-slate-400 font-label-caps">
+                        <span class="material-symbols-outlined text-[14px]">security</span>Encrypted Delivery
+                        <span class="ml-2 material-symbols-outlined text-[14px]">verified_user</span>FERPA Compliant
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</main>
 </body>
-
 </html>
