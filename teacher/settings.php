@@ -70,7 +70,7 @@ $currentEmail = (string)($teacher['email'] ?? '');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teacher Settings - EduCompliance</title>
+    <title>Teacher Settings - E-Notice</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
@@ -103,11 +103,11 @@ $currentEmail = (string)($teacher['email'] ?? '');
 <!-- Sidebar -->
 <aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl">
     <div class="p-6 flex items-center gap-3">
-        <div class="w-10 h-10 bg-secondary-container rounded flex items-center justify-center">
-            <span class="material-symbols-outlined text-white">school</span>
+        <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-400/40 shrink-0">
+            <img src="../assets/images/must_logo.png" alt="MUST Logo" class="w-full h-full object-cover">
         </div>
         <div>
-            <h1 class="text-white text-xl font-bold tracking-tight font-h1">EduCompliance</h1>
+            <h1 class="text-white text-xl font-bold tracking-tight font-h1">E-Notice</h1>
             <p class="text-slate-400 text-xs font-label-caps">Academic Administration</p>
         </div>
     </div>
@@ -286,7 +286,7 @@ $currentEmail = (string)($teacher['email'] ?? '');
 
     <!-- Footer -->
     <footer class="mt-12 p-8 border-t border-slate-200 text-on-primary-container flex justify-between items-center">
-        <p class="text-xs font-body-sm">&copy; 2026 EduCompliance Institutional Portal. All rights reserved.</p>
+        <p class="text-xs font-body-sm">&copy; 2026 E-Notice Institutional Portal. All rights reserved.</p>
         <div class="flex gap-6 text-xs font-label-caps">
             <a class="hover:text-secondary" href="#">System Status</a>
             <a class="hover:text-secondary" href="#">Support Center</a>

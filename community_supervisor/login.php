@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduCompliance Hub - Supervisor Login</title>
+    <title>E-Notice - Supervisor Login</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
@@ -105,10 +105,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </div>
             <div class="relative z-10">
                 <div class="flex items-center gap-3 mb-12">
-                    <div class="w-10 h-10 bg-secondary flex items-center justify-center rounded-lg">
-                        <span class="material-symbols-outlined text-white" style="font-variation-settings: 'FILL' 1;">school</span>
+                    <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-white/30 shrink-0">
+                        <img src="../assets/images/must_logo.png" alt="MUST Logo" class="w-full h-full object-cover">
                     </div>
-                    <h1 class="font-h2 text-2xl tracking-tight text-white">EduCompliance Hub</h1>
+                    <h1 class="font-h2 text-2xl tracking-tight text-white">E-Notice</h1>
                 </div>
                 <div class="space-y-8">
                     <div>

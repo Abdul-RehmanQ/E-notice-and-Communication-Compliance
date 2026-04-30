@@ -106,7 +106,7 @@ $stmt->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduCompliance - Student Community Feed</title>
+    <title>E-Notice - Student Community Feed</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
@@ -139,11 +139,11 @@ $stmt->close();
 <aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 shadow-xl shadow-black/20 flex flex-col z-50">
     <div class="p-6">
         <div class="flex items-center gap-3 mb-8">
-            <div class="w-10 h-10 bg-blue-600 rounded flex items-center justify-center">
-                <span class="material-symbols-outlined text-white">school</span>
+            <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-400/40 shrink-0">
+                <img src="../assets/images/must_logo.png" alt="MUST Logo" class="w-full h-full object-cover">
             </div>
             <div>
-                <h1 class="text-white text-xl font-bold tracking-tight font-h3 leading-tight">EduCompliance</h1>
+                <h1 class="text-white text-xl font-bold tracking-tight font-h3 leading-tight">E-Notice</h1>
                 <p class="text-slate-400 text-xs">Academic Administration</p>
             </div>
         </div>

@@ -109,7 +109,7 @@ $newNoticeCount = count($notifications);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduCompliance - Student Dashboard</title>
+    <title>E-Notice - Student Dashboard</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
@@ -160,9 +160,14 @@ $newNoticeCount = count($notifications);
 
 <!-- Fixed Sidebar -->
 <aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 shadow-xl shadow-black/20 flex flex-col z-50">
-    <div class="p-6 flex flex-col gap-1">
-        <span class="text-white text-xl font-h1 tracking-tight">EduCompliance</span>
-        <span class="text-slate-400 font-body-sm text-sm">Academic Administration</span>
+    <div class="p-6 flex items-center gap-3">
+        <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-400/40 shrink-0">
+            <img src="../assets/images/must_logo.png" alt="MUST Logo" class="w-full h-full object-cover">
+        </div>
+        <div class="flex flex-col gap-0.5">
+            <span class="text-white text-xl font-h1 tracking-tight">E-Notice</span>
+            <span class="text-slate-400 font-body-sm text-xs">Academic Administration</span>
+        </div>
     </div>
     <nav class="flex-1 px-4 mt-2 flex flex-col gap-1">
         <a class="flex items-center gap-3 px-4 py-3 bg-secondary/10 text-secondary border-l-4 border-secondary transition-all font-h3 text-sm" href="dashboard.php">

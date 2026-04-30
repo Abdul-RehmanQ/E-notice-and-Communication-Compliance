@@ -1073,442 +1073,559 @@ $countStmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Admin Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>Super Admin Dashboard – E-Notice</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: { extend: {
+                fontFamily: { sora: ['Sora','sans-serif'], sans: ['Source Sans 3','sans-serif'] },
+                colors: {
+                    navy: '#0F172A',
+                    'error': '#ba1a1a', 'error-container': '#ffdad6', 'on-error-container': '#93000a',
+                    'on-primary-container': '#7c839b', 'on-surface-variant': '#45464d'
+                }
+            }}
+        };
+    </script>
     <style>
-        body { padding-top: 56px; }
-
-        @media (min-width: 992px) {
-            body { padding-top: 70px; }
-            #sidebar {
-                position: fixed;
-                top: 0;
-                left: 0;
-                z-index: 1040;
-            }
-            main {
-                margin-left: 250px;
-                width: calc(100% - 250px);
-            }
-        }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+        body { background-color: #F8FAFC; font-family: 'Source Sans 3', sans-serif; }
     </style>
 </head>
+<body class="text-slate-800">
 
-<body class="bg-light">
-    <nav class="navbar navbar-dark bg-primary fixed-top d-none d-lg-flex" style="left: 250px; width: calc(100% - 250px);">
-        <div class="container-fluid justify-content-center">
-            <div class="d-flex text-white gap-3 flex-wrap justify-content-center">
-                <span><strong>Super Admin:</strong> <?php echo htmlspecialchars($_SESSION['super_admin_name'] ?? 'Admin'); ?></span>
-                <span>|</span>
-                <span><strong>Email:</strong> <?php echo htmlspecialchars($_SESSION['super_admin_email'] ?? ''); ?></span>
-                <span>|</span>
-                <span><strong>Department:</strong> <?php echo htmlspecialchars($adminDepartment ?: 'Not Set'); ?></span>
-            </div>
+<!-- ── Sidebar ── -->
+<aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl">
+    <div class="p-6 flex items-center gap-3">
+        <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-400/40 shrink-0">
+            <img src="../assets/images/must_logo.png" alt="MUST Logo" class="w-full h-full object-cover">
         </div>
-    </nav>
-
-    <nav class="navbar navbar-dark bg-primary fixed-top d-lg-none">
-        <div class="container-fluid">
-            <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <span class="navbar-brand mb-0">Super Admin</span>
-        </div>
-    </nav>
-
-    <div class="container-fluid">
-        <div class="row">
-            <div class="offcanvas-lg offcanvas-start bg-dark text-white" tabindex="-1" id="sidebar" style="width: 250px; height: 100vh;">
-                <div class="offcanvas-header">
-                    <h5 class="offcanvas-title">Menu</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" data-bs-target="#sidebar"></button>
-                </div>
-                <div class="offcanvas-body d-flex flex-column p-3">
-                    <h4 class="mb-4"><a href="dashboard.php" class="text-white text-decoration-none">Super Admin Panel</a></h4>
-                    <nav class="nav flex-column">
-                        <a class="nav-link text-white active bg-secondary rounded mb-2" href="dashboard.php"><i class="fas fa-gauge me-2"></i>Dashboard</a>
-                        <a class="nav-link text-white mb-2" href="re_enroll.php"><i class="fas fa-search me-2"></i>Re-enroll Search</a>
-                        <a class="nav-link text-white mb-2" href="settings.php"><i class="fas fa-cog me-2"></i>Settings</a>
-                        <button class="nav-link btn btn-link text-white text-start mb-2" id="logout-btn"><i class="fas fa-sign-out-alt me-2"></i>Log out</button>
-                    </nav>
-                </div>
-            </div>
-
-            <main class="col-lg-9 col-xl-10 ms-lg-auto px-md-4">
-                <div class="container py-4">
-                    <h2 class="mb-4">Academic Assignment Dashboard</h2>
-
-                    <?php if ($error): ?>
-                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                            <?php echo htmlspecialchars($error); ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    <?php endif; ?>
-
-                    <?php if ($success): ?>
-                        <div class="alert alert-success alert-dismissible fade show" role="alert">
-                            <?php echo htmlspecialchars($success); ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                    <?php endif; ?>
-
-                    <?php if (!empty($importErrors)): ?>
-                        <div class="alert alert-warning">
-                            <h6 class="mb-2">Import Validation Details</h6>
-                            <ul class="mb-0">
-                                <?php foreach (array_slice($importErrors, 0, 12) as $importError): ?>
-                                    <li><?php echo htmlspecialchars($importError); ?></li>
-                                <?php endforeach; ?>
-                                <?php if (count($importErrors) > 12): ?>
-                                    <li>...and <?php echo count($importErrors) - 12; ?> more issue(s).</li>
-                                <?php endif; ?>
-                            </ul>
-                        </div>
-                    <?php endif; ?>
-
-                    <div class="row mb-4">
-                        <div class="col-md-4 col-lg-2 mb-3">
-                            <div class="card text-bg-primary"><div class="card-body text-center"><h5 class="mb-0"><?php echo (int)$counts['teachers']; ?></h5><small>Teachers</small></div></div>
-                        </div>
-                        <div class="col-md-4 col-lg-2 mb-3">
-                            <div class="card text-bg-success"><div class="card-body text-center"><h5 class="mb-0"><?php echo (int)$counts['students']; ?></h5><small>Students</small></div></div>
-                        </div>
-                        <div class="col-md-4 col-lg-2 mb-3">
-                            <div class="card text-bg-info"><div class="card-body text-center"><h5 class="mb-0"><?php echo (int)$counts['courses']; ?></h5><small>Courses</small></div></div>
-                        </div>
-                        <div class="col-md-4 col-lg-3 mb-3">
-                            <div class="card text-bg-warning"><div class="card-body text-center"><h5 class="mb-0"><?php echo (int)$counts['assignments']; ?></h5><small>Teacher Assignments</small></div></div>
-                        </div>
-                        <div class="col-md-4 col-lg-3 mb-3">
-                            <div class="card text-bg-secondary"><div class="card-body text-center"><h5 class="mb-0"><?php echo (int)$counts['enrollments']; ?></h5><small>Active Enrollments</small></div></div>
-                        </div>
-                    </div>
-
-                    <div class="card shadow-sm mb-4">
-                        <div class="card-body d-flex flex-wrap gap-2">
-                            <a href="#students-section" class="btn btn-outline-success btn-sm">Students Section</a>
-                            <a href="#teachers-section" class="btn btn-outline-primary btn-sm">Teachers Section</a>
-                            <a href="#courses-section" class="btn btn-outline-info btn-sm">Courses Section</a>
-                        </div>
-                    </div>
-
-                    <section id="students-section" class="mb-5">
-                        <h4 class="mb-3"><i class="fas fa-user-graduate me-2"></i>Students</h4>
-                        <div class="row">
-                            <div class="col-lg-6 mb-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-header"><h5 class="mb-0">Individual Re-enroll (Search)</h5></div>
-                                    <div class="card-body">
-                                        <p class="text-muted mb-3">For failed/repeat cases, search by <strong>Roll No / Name / Email</strong> and re-enroll from a dedicated page.</p>
-                                        <a href="re_enroll.php" class="btn btn-outline-primary">
-                                            <i class="fas fa-search me-1"></i>Open Re-enroll Search
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-lg-6 mb-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-header"><h5 class="mb-0">Import Students from Excel/CSV</h5></div>
-                                    <div class="card-body">
-                                        <p class="text-muted mb-3">Headers: <strong>email, name, password, roll_no, session, department, semester_no</strong> (+ optional <strong>section</strong>)</p>
-                                        <form method="POST" action="" enctype="multipart/form-data">
-                                            <div class="row g-3 align-items-end">
-                                                <div class="col-md-12">
-                                                    <label for="student_excel" class="form-label">Excel/CSV File (.xlsx, .csv, .ods)</label>
-                                                    <input type="file" class="form-control" id="student_excel" name="student_excel" accept=".xlsx,.csv,.ods" required>
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <button type="submit" name="import_students" class="btn btn-primary w-100">
-                                                        <i class="fas fa-file-import me-1"></i>Import Students
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-12 mb-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-header"><h5 class="mb-0">Group Enroll Students (Batch)</h5></div>
-                                    <div class="card-body">
-                                        <form method="POST" action="">
-                                            <div class="row g-3">
-                                                <div class="col-md-3">
-                                                    <label for="group_department" class="form-label">Department</label>
-                                                    <select class="form-select" id="group_department" name="group_department" required>
-                                                        <option value="">Select Department</option>
-                                                        <?php foreach ($groupDepartments as $department): ?>
-                                                            <option value="<?php echo htmlspecialchars($department); ?>"><?php echo htmlspecialchars($department); ?></option>
-                                                        <?php endforeach; ?>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-3">
-                                                    <label for="group_session" class="form-label">Session</label>
-                                                    <select class="form-select" id="group_session" name="group_session" required>
-                                                        <option value="">Select Session</option>
-                                                        <?php foreach ($groupSessions as $sessionValue): ?>
-                                                            <option value="<?php echo htmlspecialchars($sessionValue); ?>"><?php echo htmlspecialchars($sessionValue); ?></option>
-                                                        <?php endforeach; ?>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <label for="group_semester_no" class="form-label">Semester</label>
-                                                    <select class="form-select" id="group_semester_no" name="group_semester_no" required>
-                                                        <option value="">Select</option>
-                                                        <?php foreach ($groupSemesters as $semesterValue): ?>
-                                                            <option value="<?php echo (int)$semesterValue; ?>"><?php echo (int)$semesterValue; ?></option>
-                                                        <?php endforeach; ?>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <label for="group_section" class="form-label">Section</label>
-                                                    <select class="form-select" id="group_section" name="group_section" required>
-                                                        <option value="">Select</option>
-                                                        <?php foreach ($groupSections as $sectionValue): ?>
-                                                            <option value="<?php echo htmlspecialchars($sectionValue); ?>"><?php echo htmlspecialchars($sectionValue); ?></option>
-                                                        <?php endforeach; ?>
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-2">
-                                                    <label for="group_enroll_course_id" class="form-label">Course</label>
-                                                    <select class="form-select" id="group_enroll_course_id" name="group_enroll_course_id" required>
-                                                        <option value="">Select Course</option>
-                                                        <?php foreach ($courses as $course): ?>
-                                                            <option value="<?php echo (int)$course['course_id']; ?>">
-                                                                <?php echo htmlspecialchars($course['course_code']); ?> - <?php echo htmlspecialchars($course['course_title']); ?>
-                                                                (Sem <?php echo (int)$course['semester_no']; ?>)
-                                                            </option>
-                                                        <?php endforeach; ?>
-                                                    </select>
-                                                    <?php if (empty($courses)): ?>
-                                                        <small class="text-muted d-block mt-1">No courses available.</small>
-                                                    <?php endif; ?>
-                                                </div>
-                                            </div>
-                                            <div class="mt-3">
-                                                <button type="submit" name="enroll_student_group" class="btn btn-success">
-                                                    <i class="fas fa-users me-1"></i>Enroll Group
-                                                </button>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-12 mb-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-header"><h5 class="mb-0">Recent Student Enrollments</h5></div>
-                                    <div class="card-body">
-                                        <?php if (empty($recentEnrollments)): ?>
-                                            <p class="text-muted mb-0">No enrollments yet.</p>
-                                        <?php else: ?>
-                                            <ul class="list-group list-group-flush">
-                                                <?php foreach ($recentEnrollments as $item): ?>
-                                                    <li class="list-group-item px-0">
-                                                        <strong><?php echo htmlspecialchars($item['course_code']); ?></strong>
-                                                        - <?php echo htmlspecialchars($item['course_title']); ?>
-                                                        <br>
-                                                        <small class="text-muted">
-                                                            Session <?php echo htmlspecialchars($item['session']); ?> | Semester <?php echo (int)$item['semester_no']; ?> | Section <?php echo htmlspecialchars($item['section']); ?>
-                                                        </small>
-                                                        <br>
-                                                        <small class="text-muted">
-                                                            Enrolled: <?php echo (int)$item['enrolled_count']; ?> student(s)
-                                                        </small>
-                                                        <br>
-                                                        <small class="text-muted">
-                                                            <?php echo date('M d, Y h:i A', strtotime($item['enrolled_at'])); ?>
-                                                        </small>
-                                                    </li>
-                                                <?php endforeach; ?>
-                                            </ul>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section id="teachers-section" class="mb-5">
-                        <h4 class="mb-3"><i class="fas fa-chalkboard-teacher me-2"></i>Teachers</h4>
-                        <div class="row">
-                            <div class="col-lg-6 mb-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-header"><h5 class="mb-0">Import Teachers from Excel/CSV</h5></div>
-                                    <div class="card-body">
-                                        <p class="text-muted mb-3">Headers: <strong>email, name, password, department</strong></p>
-                                        <form method="POST" action="" enctype="multipart/form-data">
-                                            <div class="row g-3 align-items-end">
-                                                <div class="col-md-12">
-                                                    <label for="teacher_excel" class="form-label">Excel/CSV File (.xlsx, .csv, .ods)</label>
-                                                    <input type="file" class="form-control" id="teacher_excel" name="teacher_excel" accept=".xlsx,.csv,.ods" required>
-                                                </div>
-                                                <div class="col-md-12">
-                                                    <button type="submit" name="import_teachers" class="btn btn-primary w-100">
-                                                        <i class="fas fa-file-import me-1"></i>Import Teachers
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </form>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-lg-6 mb-4">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-header"><h5 class="mb-0">Teachers in System</h5></div>
-                                    <div class="card-body">
-                                        <?php if (empty($teachers)): ?>
-                                            <p class="text-muted mb-0">No teachers found.</p>
-                                        <?php else: ?>
-                                            <ul class="list-group list-group-flush">
-                                                <?php foreach (array_slice($teachers, 0, 15) as $teacher): ?>
-                                                    <li class="list-group-item px-0 d-flex justify-content-between">
-                                                        <span><?php echo htmlspecialchars($teacher['name']); ?></span>
-                                                        <small class="text-muted"><?php echo htmlspecialchars($teacher['department']); ?></small>
-                                                    </li>
-                                                <?php endforeach; ?>
-                                            </ul>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section id="courses-section" class="mb-4">
-                        <h4 class="mb-3"><i class="fas fa-book me-2"></i>Courses</h4>
-                        <div class="row">
-                            <div class="col-lg-6 mb-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-header"><h5 class="mb-0">Assign Course to Teacher</h5></div>
-                                <div class="card-body">
-                                    <form method="POST" action="">
-                                        <div class="mb-3">
-                                            <label for="teacher_id" class="form-label">Teacher</label>
-                                            <select class="form-select" id="teacher_id" name="teacher_id" required>
-                                                <option value="">Select Teacher</option>
-                                                <?php foreach ($teachers as $teacher): ?>
-                                                    <option value="<?php echo (int)$teacher['teacher_id']; ?>">
-                                                        <?php echo htmlspecialchars($teacher['name']); ?> (<?php echo htmlspecialchars($teacher['department']); ?>)
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label for="course_id" class="form-label">Course</label>
-                                            <select class="form-select" id="course_id" name="course_id" required>
-                                                <option value="">Select Course</option>
-                                                <?php foreach ($courses as $course): ?>
-                                                    <option value="<?php echo (int)$course['course_id']; ?>">
-                                                        <?php echo htmlspecialchars($course['course_code']); ?> - <?php echo htmlspecialchars($course['course_title']); ?>
-                                                        (Sem <?php echo (int)$course['semester_no']; ?>)
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label for="offering_session" class="form-label">Session</label>
-                                            <input type="text" class="form-control" id="offering_session" name="offering_session" placeholder="e.g. 2022-2026" required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label for="offering_semester_no" class="form-label">Semester</label>
-                                            <select class="form-select" id="offering_semester_no" name="offering_semester_no" required>
-                                                <option value="">Select Semester</option>
-                                                <?php for ($semesterOption = 1; $semesterOption <= 12; $semesterOption++): ?>
-                                                    <option value="<?php echo $semesterOption; ?>"><?php echo $semesterOption; ?></option>
-                                                <?php endfor; ?>
-                                            </select>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label for="offering_section" class="form-label">Section</label>
-                                            <input type="text" class="form-control" id="offering_section" name="offering_section" placeholder="A / B" maxlength="10" required>
-                                        </div>
-                                        <button type="submit" name="assign_course" class="btn btn-primary">Assign Course</button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-
-                            <div class="col-lg-6 mb-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-header"><h5 class="mb-0">Import Courses from Excel/CSV</h5></div>
-                                <div class="card-body">
-                                    <p class="text-muted mb-3">Headers: <strong>course_code, course_title, department, semester_no</strong> (+ optional <strong>credit_hours</strong>)</p>
-                                    <form method="POST" action="" enctype="multipart/form-data">
-                                        <div class="row g-3 align-items-end">
-                                            <div class="col-md-12">
-                                                <label for="course_excel" class="form-label">Excel/CSV File (.xlsx, .csv, .ods)</label>
-                                                <input type="file" class="form-control" id="course_excel" name="course_excel" accept=".xlsx,.csv,.ods" required>
-                                            </div>
-                                            <div class="col-md-12">
-                                                <button type="submit" name="import_courses" class="btn btn-primary w-100">
-                                                    <i class="fas fa-file-import me-1"></i>Import Courses
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-
-                            <div class="col-12 mb-4">
-                            <div class="card shadow-sm h-100">
-                                <div class="card-header"><h5 class="mb-0">Recent Teacher Assignments</h5></div>
-                                <div class="card-body">
-                                    <?php if (empty($recentAssignments)): ?>
-                                        <p class="text-muted mb-0">No assignments yet.</p>
-                                    <?php else: ?>
-                                        <ul class="list-group list-group-flush">
-                                            <?php foreach ($recentAssignments as $item): ?>
-                                                <li class="list-group-item px-0">
-                                                        <strong>Combined Class Block</strong>
-                                                        <br>
-                                                        <small class="text-muted">
-                                                            Session <?php echo htmlspecialchars($item['session']); ?> | Semester <?php echo (int)$item['semester_no']; ?> | Section <?php echo htmlspecialchars($item['section']); ?>
-                                                        </small>
-                                                    <br>
-                                                        <small class="text-muted">
-                                                            Courses: <?php echo htmlspecialchars($item['course_list'] ?: 'N/A'); ?>
-                                                        </small>
-                                                        <br>
-                                                        <small class="text-muted">
-                                                            Teacher(s): <?php echo htmlspecialchars($item['teacher_names'] ?: 'N/A'); ?>
-                                                        </small>
-                                                        <br>
-                                                        <small class="text-muted">
-                                                            Assignments: <?php echo (int)$item['assigned_count']; ?>
-                                                        </small>
-                                                        <br>
-                                                    <small class="text-muted">
-                                                        <?php echo date('M d, Y h:i A', strtotime($item['assigned_at'])); ?>
-                                                    </small>
-                                                </li>
-                                            <?php endforeach; ?>
-                                        </ul>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                        </div>
-                        </div>
-                    </section>
-                </div>
-            </main>
+        <div>
+            <h1 class="text-white text-xl font-bold font-sora leading-none">E-Notice</h1>
+            <p class="text-slate-400 text-xs uppercase tracking-widest mt-0.5">Academic Admin</p>
         </div>
     </div>
+    <nav class="flex-1 px-4 py-2 space-y-1">
+        <a href="dashboard.php" class="flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 border-l-4 border-blue-500 font-sora text-sm font-semibold">
+            <span class="material-symbols-outlined">dashboard</span>Dashboard
+        </a>
+        <a href="re_enroll.php" class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-sora text-sm font-semibold">
+            <span class="material-symbols-outlined">manage_search</span>Re-enroll Search
+        </a>
+        <a href="settings.php" class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-sora text-sm font-semibold">
+            <span class="material-symbols-outlined">settings</span>Settings
+        </a>
+    </nav>
+    <div class="px-4 py-4 border-t border-slate-800">
+        <button id="logout-btn" class="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-sora text-sm font-semibold text-left">
+            <span class="material-symbols-outlined">logout</span>Log out
+        </button>
+    </div>
+</aside>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        document.getElementById('logout-btn').addEventListener('click', () => {
-            window.location.href = '../logout.php';
-        });
-    </script>
+<!-- ── Top Bar ── -->
+<header class="fixed top-0 right-0 left-[280px] h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-8 z-40 shadow-sm">
+    <div class="flex items-center gap-3">
+        <h2 class="text-slate-900 font-black text-lg font-sora">Assignment Dashboard</h2>
+        <span class="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-100 text-[11px] font-bold uppercase tracking-wider">
+            <span class="w-2 h-2 bg-blue-500 rounded-full"></span>Super Admin
+        </span>
+    </div>
+    <div class="flex items-center gap-3">
+        <div class="text-right">
+            <p class="font-bold text-slate-900 text-sm font-sora leading-none"><?php echo htmlspecialchars($_SESSION['super_admin_name'] ?? 'Admin'); ?></p>
+            <p class="text-[10px] text-blue-600 font-bold uppercase"><?php echo htmlspecialchars($adminDepartment ?: 'Department N/A'); ?></p>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm">
+            <?php echo strtoupper(substr($_SESSION['super_admin_name'] ?? 'A', 0, 1)); ?>
+        </div>
+    </div>
+</header>
+
+<!-- ── Main Content ── -->
+<main class="ml-[280px] mt-16 p-6 min-h-screen">
+    <div class="max-w-7xl mx-auto space-y-6">
+
+        <!-- Breadcrumb -->
+        <nav class="flex items-center gap-2 text-slate-500 text-sm">
+            <span>Admin</span>
+            <span class="material-symbols-outlined text-sm">chevron_right</span>
+            <span class="font-semibold text-slate-900">Academic Dashboard</span>
+        </nav>
+
+        <!-- Flash Messages -->
+        <?php if ($error): ?>
+        <div class="p-4 bg-error-container border-l-4 border-error flex gap-3 items-start rounded-r-lg">
+            <span class="material-symbols-outlined text-error" style="font-variation-settings:'FILL' 1">error</span>
+            <div>
+                <p class="font-bold text-on-error-container text-sm font-sora">Error</p>
+                <p class="text-on-error-container text-sm"><?php echo htmlspecialchars($error); ?></p>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php if ($success): ?>
+        <div class="p-4 bg-emerald-50 border-l-4 border-emerald-500 flex gap-3 items-start rounded-r-lg">
+            <span class="material-symbols-outlined text-emerald-600" style="font-variation-settings:'FILL' 1">check_circle</span>
+            <div>
+                <p class="font-bold text-emerald-800 text-sm font-sora">Success</p>
+                <p class="text-emerald-800 text-sm"><?php echo htmlspecialchars($success); ?></p>
+            </div>
+        </div>
+        <?php endif; ?>
+        <?php if (!empty($importErrors)): ?>
+        <div class="p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-lg">
+            <p class="font-bold text-amber-800 text-sm font-sora mb-2">Import Validation Issues</p>
+            <ul class="list-disc list-inside space-y-1">
+                <?php foreach (array_slice($importErrors, 0, 12) as $ie): ?>
+                    <li class="text-amber-800 text-sm"><?php echo htmlspecialchars($ie); ?></li>
+                <?php endforeach; ?>
+                <?php if (count($importErrors) > 12): ?>
+                    <li class="text-amber-700 text-sm">...and <?php echo count($importErrors) - 12; ?> more issue(s).</li>
+                <?php endif; ?>
+            </ul>
+        </div>
+        <?php endif; ?>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm border-t-4 border-t-blue-600">
+                <div class="flex justify-between items-start mb-3">
+                    <span class="material-symbols-outlined text-slate-400 bg-slate-50 p-2 rounded-lg">person_pin</span>
+                </div>
+                <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Teachers</p>
+                <p class="text-2xl font-bold text-slate-900 font-sora"><?php echo (int)$counts['teachers']; ?></p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm border-t-4 border-t-emerald-500">
+                <div class="flex justify-between items-start mb-3">
+                    <span class="material-symbols-outlined text-slate-400 bg-slate-50 p-2 rounded-lg">groups</span>
+                </div>
+                <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Students</p>
+                <p class="text-2xl font-bold text-slate-900 font-sora"><?php echo (int)$counts['students']; ?></p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm border-t-4 border-t-indigo-500">
+                <div class="flex justify-between items-start mb-3">
+                    <span class="material-symbols-outlined text-slate-400 bg-slate-50 p-2 rounded-lg">book_5</span>
+                </div>
+                <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Courses</p>
+                <p class="text-2xl font-bold text-slate-900 font-sora"><?php echo (int)$counts['courses']; ?></p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm border-t-4 border-t-amber-500">
+                <div class="flex justify-between items-start mb-3">
+                    <span class="material-symbols-outlined text-amber-500 bg-amber-50 p-2 rounded-lg">assignment_turned_in</span>
+                </div>
+                <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Assignments</p>
+                <p class="text-2xl font-bold text-slate-900 font-sora"><?php echo (int)$counts['assignments']; ?></p>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm border-t-4 border-t-slate-600">
+                <div class="flex justify-between items-start mb-3">
+                    <span class="material-symbols-outlined text-slate-400 bg-slate-50 p-2 rounded-lg">fact_check</span>
+                </div>
+                <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Enrollments</p>
+                <p class="text-2xl font-bold text-slate-900 font-sora"><?php echo (int)$counts['enrollments']; ?></p>
+            </div>
+        </div>
+
+        <!-- Quick Nav -->
+        <div class="flex flex-wrap gap-3">
+            <a href="#students-section" class="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-sm font-bold hover:bg-emerald-100 transition-all">
+                <span class="material-symbols-outlined text-sm">school</span>Students
+            </a>
+            <a href="#teachers-section" class="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-bold hover:bg-blue-100 transition-all">
+                <span class="material-symbols-outlined text-sm">person_pin</span>Teachers
+            </a>
+            <a href="#courses-section" class="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-bold hover:bg-indigo-100 transition-all">
+                <span class="material-symbols-outlined text-sm">book_5</span>Courses
+            </a>
+        </div>
+
+        <!-- ── Students Section ── -->
+        <section id="students-section" class="space-y-4">
+            <div class="flex items-center gap-3 pb-2 border-b border-slate-200">
+                <div class="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+                    <span class="material-symbols-outlined text-emerald-600 text-lg">school</span>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900 font-sora">Students</h3>
+            </div>
+
+            <!-- Top row: Re-enroll + Import -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                <!-- Individual Re-enroll -->
+                <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="material-symbols-outlined text-blue-600 bg-blue-50 p-2 rounded-lg">manage_search</span>
+                        <h4 class="font-sora font-semibold text-slate-900">Individual Re-enroll</h4>
+                    </div>
+                    <p class="text-slate-500 text-sm mb-4">For failed/repeat cases, search by <strong class="text-slate-700">Roll No / Name / Email</strong> and re-enroll from a dedicated page.</p>
+                    <a href="re_enroll.php" class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-all shadow-sm">
+                        <span class="material-symbols-outlined text-sm">search</span>Open Re-enroll Search
+                    </a>
+                </div>
+
+                <!-- Import Students -->
+                <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="material-symbols-outlined text-emerald-600 bg-emerald-50 p-2 rounded-lg" style="font-variation-settings:'FILL' 1">upload_file</span>
+                        <h4 class="font-sora font-semibold text-slate-900">Import Students from Excel/CSV</h4>
+                    </div>
+                    <p class="text-slate-500 text-xs mb-4">Required headers: <span class="font-mono bg-slate-100 px-1 rounded text-slate-700">email, name, password, roll_no, session, department, semester_no</span> + optional <span class="font-mono bg-slate-100 px-1 rounded text-slate-700">section</span></p>
+                    <form method="POST" action="" enctype="multipart/form-data" class="space-y-3">
+                        <div>
+                            <label for="student_excel" class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Excel / CSV File (.xlsx, .csv, .ods)</label>
+                            <input type="file" id="student_excel" name="student_excel" accept=".xlsx,.csv,.ods" required
+                                class="w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 file:font-bold hover:file:bg-emerald-100 border border-slate-200 rounded-lg p-1">
+                        </div>
+                        <button type="submit" name="import_students" class="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-emerald-700 transition-all shadow-sm">
+                            <span class="material-symbols-outlined text-sm">cloud_upload</span>Import Students
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Group Enroll -->
+            <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                <div class="flex items-center gap-3 mb-5">
+                    <span class="material-symbols-outlined text-amber-600 bg-amber-50 p-2 rounded-lg">group_add</span>
+                    <h4 class="font-sora font-semibold text-slate-900">Group Enroll Students (Batch)</h4>
+                </div>
+                <form method="POST" action="">
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+                        <div>
+                            <label for="group_department" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Department</label>
+                            <select id="group_department" name="group_department" required
+                                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
+                                <option value="">Select</option>
+                                <?php foreach ($groupDepartments as $department): ?>
+                                    <option value="<?php echo htmlspecialchars($department); ?>"><?php echo htmlspecialchars($department); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="group_session" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Session</label>
+                            <select id="group_session" name="group_session" required
+                                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
+                                <option value="">Select</option>
+                                <?php foreach ($groupSessions as $sessionValue): ?>
+                                    <option value="<?php echo htmlspecialchars($sessionValue); ?>"><?php echo htmlspecialchars($sessionValue); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="group_semester_no" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Semester</label>
+                            <select id="group_semester_no" name="group_semester_no" required
+                                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
+                                <option value="">Select</option>
+                                <?php foreach ($groupSemesters as $semesterValue): ?>
+                                    <option value="<?php echo (int)$semesterValue; ?>"><?php echo (int)$semesterValue; ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="group_section" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Section</label>
+                            <select id="group_section" name="group_section" required
+                                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
+                                <option value="">Select</option>
+                                <?php foreach ($groupSections as $sectionValue): ?>
+                                    <option value="<?php echo htmlspecialchars($sectionValue); ?>"><?php echo htmlspecialchars($sectionValue); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="group_enroll_course_id" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Course</label>
+                            <select id="group_enroll_course_id" name="group_enroll_course_id" required
+                                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
+                                <option value="">Select</option>
+                                <?php foreach ($courses as $course): ?>
+                                    <option value="<?php echo (int)$course['course_id']; ?>">
+                                        <?php echo htmlspecialchars($course['course_code']); ?> (Sem <?php echo (int)$course['semester_no']; ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <?php if (empty($courses)): ?>
+                                <p class="text-xs text-slate-400 mt-1">No courses available.</p>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <button type="submit" name="enroll_student_group"
+                        class="inline-flex items-center gap-2 bg-amber-500 text-white px-6 py-2.5 rounded-lg font-bold text-sm hover:bg-amber-600 transition-all shadow-sm">
+                        <span class="material-symbols-outlined text-sm">group_add</span>Enroll Group
+                    </button>
+                </form>
+            </div>
+
+            <!-- Recent Student Enrollments -->
+            <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                    <span class="material-symbols-outlined text-slate-500">history_edu</span>
+                    <h4 class="font-sora font-semibold text-slate-900">Recent Student Enrollments</h4>
+                </div>
+                <?php if (empty($recentEnrollments)): ?>
+                    <div class="px-6 py-8 text-center text-slate-400 text-sm">No enrollments yet.</div>
+                <?php else: ?>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                <tr>
+                                    <th class="px-6 py-3 border-b border-slate-200">Course</th>
+                                    <th class="px-6 py-3 border-b border-slate-200">Session</th>
+                                    <th class="px-6 py-3 border-b border-slate-200">Sem</th>
+                                    <th class="px-6 py-3 border-b border-slate-200">Section</th>
+                                    <th class="px-6 py-3 border-b border-slate-200">Enrolled</th>
+                                    <th class="px-6 py-3 border-b border-slate-200">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <?php foreach ($recentEnrollments as $item): ?>
+                                <tr class="hover:bg-slate-50/80 transition-all">
+                                    <td class="px-6 py-3 font-semibold text-slate-900">
+                                        <?php echo htmlspecialchars($item['course_code']); ?>
+                                        <span class="block text-xs text-slate-400 font-normal"><?php echo htmlspecialchars($item['course_title']); ?></span>
+                                    </td>
+                                    <td class="px-6 py-3 text-slate-600"><?php echo htmlspecialchars($item['session']); ?></td>
+                                    <td class="px-6 py-3 text-slate-600"><?php echo (int)$item['semester_no']; ?></td>
+                                    <td class="px-6 py-3 text-slate-600"><?php echo htmlspecialchars($item['section']); ?></td>
+                                    <td class="px-6 py-3">
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full">
+                                            <?php echo (int)$item['enrolled_count']; ?> student(s)
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-3 text-slate-400 text-xs"><?php echo date('M d, Y h:i A', strtotime($item['enrolled_at'])); ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </section>
+
+
+        <!-- ── Teachers Section ── -->
+        <section id="teachers-section" class="space-y-4">
+            <div class="flex items-center gap-3 pb-2 border-b border-slate-200">
+                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <span class="material-symbols-outlined text-blue-600 text-lg">person_pin</span>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900 font-sora">Teachers</h3>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                <!-- Import Teachers -->
+                <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="material-symbols-outlined text-blue-600 bg-blue-50 p-2 rounded-lg" style="font-variation-settings:'FILL' 1">upload_file</span>
+                        <h4 class="font-sora font-semibold text-slate-900">Import Teachers from Excel/CSV</h4>
+                    </div>
+                    <p class="text-slate-500 text-xs mb-4">Required headers: <span class="font-mono bg-slate-100 px-1 rounded text-slate-700">email, name, password, department</span></p>
+                    <form method="POST" action="" enctype="multipart/form-data" class="space-y-3">
+                        <div>
+                            <label for="teacher_excel" class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Excel / CSV File (.xlsx, .csv, .ods)</label>
+                            <input type="file" id="teacher_excel" name="teacher_excel" accept=".xlsx,.csv,.ods" required
+                                class="w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 file:font-bold hover:file:bg-blue-100 border border-slate-200 rounded-lg p-1">
+                        </div>
+                        <button type="submit" name="import_teachers"
+                            class="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-blue-700 transition-all shadow-sm">
+                            <span class="material-symbols-outlined text-sm">cloud_upload</span>Import Teachers
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Teachers in System -->
+                <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                        <span class="material-symbols-outlined text-slate-500">badge</span>
+                        <h4 class="font-sora font-semibold text-slate-900">Teachers in System</h4>
+                        <span class="ml-auto text-xs font-bold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full"><?php echo count($teachers); ?> total</span>
+                    </div>
+                    <?php if (empty($teachers)): ?>
+                        <div class="px-6 py-8 text-center text-slate-400 text-sm">No teachers found.</div>
+                    <?php else: ?>
+                        <ul class="divide-y divide-slate-100">
+                            <?php foreach (array_slice($teachers, 0, 15) as $teacher): ?>
+                            <li class="flex items-center justify-between px-6 py-3 hover:bg-slate-50/80 transition-all">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
+                                        <?php echo strtoupper(substr($teacher['name'], 0, 1)); ?>
+                                    </div>
+                                    <span class="text-sm font-semibold text-slate-800"><?php echo htmlspecialchars($teacher['name']); ?></span>
+                                </div>
+                                <span class="text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full"><?php echo htmlspecialchars($teacher['department']); ?></span>
+                            </li>
+                            <?php endforeach; ?>
+                        </ul>
+                        <?php if (count($teachers) > 15): ?>
+                        <div class="px-6 py-3 border-t border-slate-100 text-xs text-slate-400 text-center">
+                            Showing 15 of <?php echo count($teachers); ?> teachers
+                        </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+
+            </div>
+        </section>
+
+
+
+        <!-- ── Courses Section ── -->
+        <section id="courses-section" class="space-y-4">
+            <div class="flex items-center gap-3 pb-2 border-b border-slate-200">
+                <div class="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+                    <span class="material-symbols-outlined text-indigo-600 text-lg">book_5</span>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900 font-sora">Courses</h3>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                <!-- Assign Course to Teacher -->
+                <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                    <div class="flex items-center gap-3 mb-5">
+                        <span class="material-symbols-outlined text-indigo-600 bg-indigo-50 p-2 rounded-lg" style="font-variation-settings:'FILL' 1">assignment_add</span>
+                        <h4 class="font-sora font-semibold text-slate-900">Assign Course to Teacher</h4>
+                    </div>
+                    <form method="POST" action="" class="space-y-4">
+                        <div>
+                            <label for="teacher_id" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Teacher</label>
+                            <select id="teacher_id" name="teacher_id" required
+                                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none bg-slate-50">
+                                <option value="">Select Teacher</option>
+                                <?php foreach ($teachers as $teacher): ?>
+                                    <option value="<?php echo (int)$teacher['teacher_id']; ?>">
+                                        <?php echo htmlspecialchars($teacher['name']); ?> (<?php echo htmlspecialchars($teacher['department']); ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="course_id" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Course</label>
+                            <select id="course_id" name="course_id" required
+                                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none bg-slate-50">
+                                <option value="">Select Course</option>
+                                <?php foreach ($courses as $course): ?>
+                                    <option value="<?php echo (int)$course['course_id']; ?>">
+                                        <?php echo htmlspecialchars($course['course_code']); ?> – <?php echo htmlspecialchars($course['course_title']); ?>
+                                        (Sem <?php echo (int)$course['semester_no']; ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div>
+                                <label for="offering_session" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Session</label>
+                                <input type="text" id="offering_session" name="offering_session" placeholder="e.g. 2022-2026" required
+                                    class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none bg-slate-50">
+                            </div>
+                            <div>
+                                <label for="offering_semester_no" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Semester</label>
+                                <select id="offering_semester_no" name="offering_semester_no" required
+                                    class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none bg-slate-50">
+                                    <option value="">Select</option>
+                                    <?php for ($semesterOption = 1; $semesterOption <= 12; $semesterOption++): ?>
+                                        <option value="<?php echo $semesterOption; ?>"><?php echo $semesterOption; ?></option>
+                                    <?php endfor; ?>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="offering_section" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">Section</label>
+                                <input type="text" id="offering_section" name="offering_section" placeholder="A / B" maxlength="10" required
+                                    class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500/20 outline-none bg-slate-50">
+                            </div>
+                        </div>
+                        <button type="submit" name="assign_course"
+                            class="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-indigo-700 transition-all shadow-sm">
+                            <span class="material-symbols-outlined text-sm">bolt</span>Execute Assignment
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Import Courses -->
+                <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="material-symbols-outlined text-indigo-600 bg-indigo-50 p-2 rounded-lg" style="font-variation-settings:'FILL' 1">upload_file</span>
+                        <h4 class="font-sora font-semibold text-slate-900">Import Courses from Excel/CSV</h4>
+                    </div>
+                    <p class="text-slate-500 text-xs mb-4">Required headers: <span class="font-mono bg-slate-100 px-1 rounded text-slate-700">course_code, course_title, department, semester_no</span> + optional <span class="font-mono bg-slate-100 px-1 rounded text-slate-700">credit_hours</span></p>
+                    <form method="POST" action="" enctype="multipart/form-data" class="space-y-3">
+                        <div>
+                            <label for="course_excel" class="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">Excel / CSV File (.xlsx, .csv, .ods)</label>
+                            <input type="file" id="course_excel" name="course_excel" accept=".xlsx,.csv,.ods" required
+                                class="w-full text-sm text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:font-bold hover:file:bg-indigo-100 border border-slate-200 rounded-lg p-1">
+                        </div>
+                        <button type="submit" name="import_courses"
+                            class="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-indigo-700 transition-all shadow-sm">
+                            <span class="material-symbols-outlined text-sm">cloud_upload</span>Import Courses
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+
+            <!-- Recent Teacher Assignments -->
+            <div class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+                    <span class="material-symbols-outlined text-slate-500">history</span>
+                    <h4 class="font-sora font-semibold text-slate-900">Recent Teacher Assignments</h4>
+                </div>
+                <?php if (empty($recentAssignments)): ?>
+                    <div class="px-6 py-8 text-center text-slate-400 text-sm">No assignments yet.</div>
+                <?php else: ?>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                <tr>
+                                    <th class="px-6 py-3 border-b border-slate-200">Session / Sem / Section</th>
+                                    <th class="px-6 py-3 border-b border-slate-200">Courses</th>
+                                    <th class="px-6 py-3 border-b border-slate-200">Teacher(s)</th>
+                                    <th class="px-6 py-3 border-b border-slate-200">Count</th>
+                                    <th class="px-6 py-3 border-b border-slate-200">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <?php foreach ($recentAssignments as $item): ?>
+                                <tr class="hover:bg-slate-50/80 transition-all">
+                                    <td class="px-6 py-3 font-semibold text-slate-900">
+                                        <?php echo htmlspecialchars($item['session']); ?>
+                                        <span class="block text-xs text-slate-400 font-normal">Sem <?php echo (int)$item['semester_no']; ?> · §<?php echo htmlspecialchars($item['section']); ?></span>
+                                    </td>
+                                    <td class="px-6 py-3 text-slate-600 text-xs max-w-xs truncate"><?php echo htmlspecialchars($item['course_list'] ?: 'N/A'); ?></td>
+                                    <td class="px-6 py-3 text-slate-600 text-xs"><?php echo htmlspecialchars($item['teacher_names'] ?: 'N/A'); ?></td>
+                                    <td class="px-6 py-3">
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-full">
+                                            <?php echo (int)$item['assigned_count']; ?>
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-3 text-slate-400 text-xs"><?php echo date('M d, Y h:i A', strtotime($item['assigned_at'])); ?></td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="pt-8 pb-4 border-t border-slate-200 flex justify-between items-center text-xs text-slate-400">
+            <p>&copy; <?php echo date('Y'); ?> E-Notice Institutional Portal. All rights reserved.</p>
+            <div class="flex gap-6 font-bold">
+                <a href="#" class="hover:text-blue-600 transition-colors">System Status</a>
+                <a href="#" class="hover:text-blue-600 transition-colors">Support</a>
+            </div>
+        </footer>
+
+    </div><!-- /max-w-7xl -->
+</main>
+
+<script>
+    document.getElementById('logout-btn').addEventListener('click', () => {
+        window.location.href = '../logout.php';
+    });
+</script>
 </body>
-
 </html>
