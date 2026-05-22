@@ -1,6 +1,7 @@
 <?php
 session_start();
 include '../config.php';
+include '../audit_log.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin') {
     header("Location: login.php");
@@ -81,6 +82,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reenroll_student'])) 
                     $insertStmt->bind_param("iii", $studentId, $courseId, $adminId);
                     if ($insertStmt->execute()) {
                         $success = 'Student re-enrolled successfully.';
+                        logActivity($conn, $adminId, 'super_admin', 're_enroll_student', 'student', $studentId, [
+                            'student_id' => $studentId,
+                            'course_id' => $courseId,
+                            'enrolled_by' => $adminId
+                        ]);
                     } else {
                         $error = 'Failed to re-enroll student: ' . $conn->error;
                     }
@@ -172,6 +178,9 @@ if ($searchTerm !== '') {
         </a>
         <a href="re_enroll.php" class="flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 border-l-4 border-blue-500 font-sora text-sm font-semibold">
             <span class="material-symbols-outlined">manage_search</span>Re-enroll Search
+        </a>
+        <a href="audit_logs.php" class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-sora text-sm font-semibold">
+            <span class="material-symbols-outlined">receipt_long</span>Audit Logs
         </a>
         <a href="settings.php" class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-sora text-sm font-semibold">
             <span class="material-symbols-outlined">settings</span>Settings

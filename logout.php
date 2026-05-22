@@ -4,6 +4,9 @@ include 'config.php';
 
 // Update logout_time if user is logged in
 if (isset($_SESSION['user_id'])) {
+    include 'audit_log.php';
+    logActivity($conn, $_SESSION['user_id'], $_SESSION['role'] ?? 'student', 'logout');
+
     $stmt = $conn->prepare("UPDATE user SET logout_time = NOW() WHERE user_id = ?");
     $stmt->bind_param("i", $_SESSION['user_id']);
     $stmt->execute();

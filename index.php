@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'config.php';
+include 'audit_log.php';
 
 $error = '';
 $submittedRollNumber = '';
@@ -28,7 +29,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $updateStmt->execute();
             $updateStmt->close();
 
+            // Audit: student login success
+            logActivity($conn, $student['user_id'] ?? null, 'student', 'login', null, null, ['method' => 'roll_number', 'status' => 'success']);
+
             $_SESSION['user_id'] = $student['user_id'];
+            $_SESSION['role'] = 'student';
             $_SESSION['student_id'] = $student['student_id'];
             $_SESSION['roll_number'] = $student['Roll_no'];
             $_SESSION['student_name'] = $student['name'];

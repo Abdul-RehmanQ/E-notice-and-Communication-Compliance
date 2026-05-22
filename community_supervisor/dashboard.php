@@ -1,6 +1,7 @@
 <?php
 session_start();
 include '../config.php';
+include '../audit_log.php';
 require_once __DIR__ . '/supervisor_guard.php';
 
 $supervisor = requireSupervisorIdentity($conn);
@@ -45,6 +46,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['approve_post'])) {
         $logStmt->bind_param("ii", $postId, $supervisorId);
         $logStmt->execute();
         $logStmt->close();
+        logActivity($conn, $supervisorId, 'community_supervisor', 'approve_post', 'posts', $postId, [
+            'post_id' => $postId,
+            'supervisor_id' => $supervisorId,
+            'status' => 'approved'
+        ]);
         supervisorRedirectWithFlash('success', 'Post approved successfully!');
     } else supervisorRedirectWithFlash('error', 'Failed to approve post.');
     $stmt->close();
@@ -63,6 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['reject_post'])) {
     $logStmt = $conn->prepare("INSERT INTO post_reviews (post_id, supervisor_id, action, rejection_reason) VALUES (?, ?, 'rejected', ?)");
     $logStmt->bind_param("iis", $postId, $supervisorId, $reason);
     $logStmt->execute();
+    logActivity($conn, $supervisorId, 'community_supervisor', 'reject_post', 'posts', $postId, [
+        'post_id' => $postId,
+        'supervisor_id' => $supervisorId,
+        'status' => 'rejected',
+        'rejection_reason' => $reason
+    ]);
     $logStmt->close();
     $stmt = $conn->prepare("DELETE p FROM posts p LEFT JOIN student s ON p.user_id = s.student_id LEFT JOIN teacher t ON p.user_id = t.teacher_id WHERE p.post_id = ? AND p.status = 'pending' AND COALESCE(NULLIF(LOWER(TRIM(s.department)), ''), NULLIF(LOWER(TRIM(t.department)), '')) = ?");
     $stmt->bind_param("is", $postId, $supervisorDepartmentNormalized);

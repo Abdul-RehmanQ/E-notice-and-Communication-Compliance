@@ -1,6 +1,7 @@
 <?php
 session_start();
 include '../config.php';
+include '../audit_log.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'super_admin') {
     header("Location: login.php");
@@ -52,6 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_password'])) {
             $updateStmt->bind_param("si", $hashedPassword, $_SESSION['user_id']);
             if ($updateStmt->execute()) {
                 $password_success = 'Password updated successfully!';
+                logActivity($conn, $adminId, 'super_admin', 'update_password', 'user', $adminId, [
+                    'status' => 'success'
+                ]);
             } else {
                 $password_error = 'Failed to update password!';
             }
@@ -120,6 +124,9 @@ $countStmt->close();
         </a>
         <a href="re_enroll.php" class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-sora text-sm font-semibold">
             <span class="material-symbols-outlined">manage_search</span>Re-enroll Search
+        </a>
+        <a href="audit_logs.php" class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-sora text-sm font-semibold">
+            <span class="material-symbols-outlined">receipt_long</span>Audit Logs
         </a>
         <a href="settings.php" class="flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 border-l-4 border-blue-500 font-sora text-sm font-semibold">
             <span class="material-symbols-outlined">settings</span>Settings

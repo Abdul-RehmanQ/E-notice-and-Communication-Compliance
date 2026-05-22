@@ -1117,6 +1117,9 @@ $countStmt->close();
         <a href="re_enroll.php" class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-sora text-sm font-semibold">
             <span class="material-symbols-outlined">manage_search</span>Re-enroll Search
         </a>
+        <a href="audit_logs.php" class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-sora text-sm font-semibold">
+            <span class="material-symbols-outlined">receipt_long</span>Audit Logs
+        </a>
         <a href="settings.php" class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-slate-800 hover:text-white transition-all font-sora text-sm font-semibold">
             <span class="material-symbols-outlined">settings</span>Settings
         </a>

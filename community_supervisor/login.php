@@ -1,6 +1,7 @@
 <?php
 session_start();
 include '../config.php';
+include '../audit_log.php';
 
 $error = '';
 
@@ -26,6 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $updateStmt->execute();
             $updateStmt->close();
 
+            // Audit: supervisor login success
+            logActivity($conn, $supervisor['user_id'] ?? null, 'community_supervisor', 'login', null, null, ['status' => 'success']);
+
             $_SESSION['user_id'] = $supervisor['user_id'];
             $_SESSION['supervisor_id'] = $supervisor['supervisor_id'];
             $_SESSION['supervisor_name'] = $supervisor['name'];
@@ -44,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 ?>
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -57,44 +62,84 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             theme: {
                 extend: {
                     colors: {
-                        'surface-variant': '#e4e2e4', 'error': '#ba1a1a', 'secondary': '#0040e0',
-                        'on-background': '#1b1b1d', 'on-secondary-container': '#efefff',
-                        'secondary-fixed': '#dde1ff', 'on-primary-container': '#cfd5e8',
-                        'on-secondary': '#ffffff', 'outline': '#76777d', 'on-error': '#ffffff',
-                        'surface-dim': '#dcd9db', 'tertiary': '#000000', 'primary': '#000000',
-                        'primary-fixed-dim': '#bec6e0', 'surface-container': '#f0edef',
-                        'primary-fixed': '#dae2fd', 'surface-container-lowest': '#ffffff',
-                        'tertiary-fixed': '#6ffbbe', 'surface-tint': '#565e74',
-                        'surface-container-high': '#eae7e9', 'tertiary-container': '#002113',
-                        'on-primary': '#ffffff', 'surface-container-low': '#f6f3f5',
-                        'primary-container': '#131b2e', 'on-tertiary-container': '#009668',
-                        'on-primary-fixed': '#131b2e', 'tertiary-fixed-dim': '#4edea3',
-                        'surface-container-highest': '#e4e2e4', 'surface-bright': '#fcf8fa',
-                        'on-tertiary': '#ffffff', 'inverse-primary': '#bec6e0',
-                        'secondary-container': '#2e5bff', 'surface': '#fcf8fa',
-                        'on-surface-variant': '#45464d', 'background': '#fcf8fa',
-                        'on-error-container': '#93000a', 'secondary-fixed-dim': '#b8c3ff',
-                        'inverse-surface': '#303032', 'on-primary-fixed-variant': '#3f465c',
-                        'on-surface': '#1b1b1d', 'inverse-on-surface': '#f3f0f2',
-                        'outline-variant': '#c6c6cd', 'error-container': '#ffdad6',
+                        'surface-variant': '#e4e2e4',
+                        'error': '#ba1a1a',
+                        'secondary': '#0040e0',
+                        'on-background': '#1b1b1d',
+                        'on-secondary-container': '#efefff',
+                        'secondary-fixed': '#dde1ff',
+                        'on-primary-container': '#cfd5e8',
+                        'on-secondary': '#ffffff',
+                        'outline': '#76777d',
+                        'on-error': '#ffffff',
+                        'surface-dim': '#dcd9db',
+                        'tertiary': '#000000',
+                        'primary': '#000000',
+                        'primary-fixed-dim': '#bec6e0',
+                        'surface-container': '#f0edef',
+                        'primary-fixed': '#dae2fd',
+                        'surface-container-lowest': '#ffffff',
+                        'tertiary-fixed': '#6ffbbe',
+                        'surface-tint': '#565e74',
+                        'surface-container-high': '#eae7e9',
+                        'tertiary-container': '#002113',
+                        'on-primary': '#ffffff',
+                        'surface-container-low': '#f6f3f5',
+                        'primary-container': '#131b2e',
+                        'on-tertiary-container': '#009668',
+                        'on-primary-fixed': '#131b2e',
+                        'tertiary-fixed-dim': '#4edea3',
+                        'surface-container-highest': '#e4e2e4',
+                        'surface-bright': '#fcf8fa',
+                        'on-tertiary': '#ffffff',
+                        'inverse-primary': '#bec6e0',
+                        'secondary-container': '#2e5bff',
+                        'surface': '#fcf8fa',
+                        'on-surface-variant': '#45464d',
+                        'background': '#fcf8fa',
+                        'on-error-container': '#93000a',
+                        'secondary-fixed-dim': '#b8c3ff',
+                        'inverse-surface': '#303032',
+                        'on-primary-fixed-variant': '#3f465c',
+                        'on-surface': '#1b1b1d',
+                        'inverse-on-surface': '#f3f0f2',
+                        'outline-variant': '#c6c6cd',
+                        'error-container': '#ffdad6',
                         'on-secondary-fixed': '#001356'
                     },
-                    borderRadius: { DEFAULT: '0.125rem', lg: '0.25rem', xl: '0.5rem', full: '0.75rem' },
+                    borderRadius: {
+                        DEFAULT: '0.125rem',
+                        lg: '0.25rem',
+                        xl: '0.5rem',
+                        full: '0.75rem'
+                    },
                     fontFamily: {
-                        h3: ['Sora', 'sans-serif'], h1: ['Sora', 'sans-serif'],
-                        'label-caps': ['Sora', 'sans-serif'], 'body-md': ['Source Sans 3', 'sans-serif'],
-                        'body-sm': ['Source Sans 3', 'sans-serif'], h2: ['Sora', 'sans-serif'],
-                        'body-lg': ['Source Sans 3', 'sans-serif'], 'data-tabular': ['Source Sans 3', 'sans-serif']
+                        h3: ['Sora', 'sans-serif'],
+                        h1: ['Sora', 'sans-serif'],
+                        'label-caps': ['Sora', 'sans-serif'],
+                        'body-md': ['Source Sans 3', 'sans-serif'],
+                        'body-sm': ['Source Sans 3', 'sans-serif'],
+                        h2: ['Sora', 'sans-serif'],
+                        'body-lg': ['Source Sans 3', 'sans-serif'],
+                        'data-tabular': ['Source Sans 3', 'sans-serif']
                     }
                 }
             }
         };
     </script>
     <style>
-        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
-        .academic-mesh { background-color: #fcf8fa; background-image: radial-gradient(#e4e2e4 0.5px, transparent 0.5px); background-size: 24px 24px; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .academic-mesh {
+            background-color: #fcf8fa;
+            background-image: radial-gradient(#e4e2e4 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+        }
     </style>
 </head>
+
 <body class="bg-background font-body-md text-on-background academic-mesh min-h-screen flex items-center justify-center p-6">
     <main class="w-full max-w-[1100px] grid grid-cols-1 md:grid-cols-12 bg-white rounded-xl shadow-xl shadow-slate-200/50 overflow-hidden border border-outline-variant">
 
@@ -221,4 +266,5 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     </script>
 </body>
+
 </html>

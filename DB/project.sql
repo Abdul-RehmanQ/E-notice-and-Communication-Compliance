@@ -147,6 +147,30 @@ CREATE TABLE `notifications` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
+-- Table structure for table `activity_logs`
+-- Comprehensive audit trail for all actors
+-- --------------------------------------------------------
+
+CREATE TABLE `activity_logs` (
+  `activity_id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `user_id` INT NULL,
+  `actor_role` ENUM('student','teacher','community_supervisor','super_admin') NOT NULL,
+  `action_type` VARCHAR(80) NOT NULL,
+  `entity_type` VARCHAR(80) DEFAULT NULL,
+  `entity_id` INT DEFAULT NULL,
+  `action_details` JSON DEFAULT NULL,
+  `ip_address` VARCHAR(45) DEFAULT NULL,
+  `user_agent` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_user_created` (`user_id`, `created_at`),
+  INDEX `idx_action_type` (`action_type`, `created_at`),
+  INDEX `idx_entity` (`entity_type`, `entity_id`),
+  INDEX `idx_actor_role` (`actor_role`, `created_at`),
+  INDEX `idx_created_at` (`created_at`),
+  CONSTRAINT `fk_activity_user` FOREIGN KEY (`user_id`) REFERENCES `user`(`user_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
 
 --
 -- Table structure for table `notification_recipients`
