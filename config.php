@@ -1,4 +1,6 @@
 <?php
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+
 // Database Configuration
 $host = 'localhost';
 $dbname = 'project';  // Change this to your database name
