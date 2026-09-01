@@ -114,6 +114,122 @@ INSERT INTO `course_offerings` (`offering_id`, `course_id`, `department`, `sessi
 -- --------------------------------------------------------
 
 --
+<<<<<<< HEAD
+=======
+-- Table structure for table `messages`
+--
+
+CREATE TABLE `messages` (
+  `message_id` int(11) NOT NULL,
+  `sender_id` int(11) NOT NULL,
+  `recipient_id` int(11) NOT NULL,
+  `recipient_email` varchar(255) NOT NULL,
+  `post_id` int(11) DEFAULT NULL,
+  `subject` varchar(255) DEFAULT NULL,
+  `body` text DEFAULT NULL,
+  `sent_at` datetime DEFAULT current_timestamp(),
+  `status` enum('sent','failed') DEFAULT 'sent'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `messages`
+--
+
+INSERT INTO `messages` (`message_id`, `sender_id`, `recipient_id`, `recipient_email`, `post_id`, `subject`, `body`, `sent_at`, `status`) VALUES
+(5, 94, 91, 'ahmedalu6y@gmail.com', NULL, 'Re: testing the email feature.', '\r\n            <div style=\'font-family: Arial, sans-serif; padding: 20px;\'>\r\n                <h3>Re: testing the email feature.</h3>\r\n                <p>please send a text on whatsapp if u get this email. Also attach a picture.</p>\r\n                <hr>\r\n                <p style=\'color: #666; font-size: 12px;\'>This message was sent via University Portal by student-01</p>\r\n            </div>\r\n        ', '2026-02-14 21:46:55', 'failed'),
+(6, 94, 91, 'ahmedalu6y@gmail.com', NULL, 'Re: testing the email feature.', '\r\n            <div style=\'font-family: Arial, sans-serif; padding: 20px;\'>\r\n                <h3>Re: testing the email feature.</h3>\r\n                <p>please send a text on whatsapp if u get this email. Also attach a picture.</p>\r\n                <hr>\r\n                <p style=\'color: #666; font-size: 12px;\'>This message was sent via University Portal by student-01</p>\r\n            </div>\r\n        ', '2026-02-14 21:49:38', 'sent'),
+(7, 94, 91, 'ahmedalu6y@gmail.com', NULL, 'Re: testing the email feature.', '\r\n            <div style=\'font-family: Arial, sans-serif; padding: 20px;\'>\r\n                <h3>Re: testing the email feature.</h3>\r\n                <p>Do the same, but open the section where emails are shown.</p>\r\n                <hr>\r\n                <p style=\'color: #666; font-size: 12px;\'>This message was sent via University Portal by student-01</p>\r\n            </div>\r\n        ', '2026-02-14 22:07:21', 'sent'),
+(8, 94, 91, 'ahsinsaghir@gmail.com', NULL, 'Re: test notidbvasfbi', '\r\n            <div style=\'font-family: Arial, sans-serif; padding: 20px;\'>\r\n                <h3>Re: test notidbvasfbi</h3>\r\n                <p>sedrftgyhujik</p>\r\n                <hr>\r\n                <p style=\'color: #666; font-size: 12px;\'>This message was sent via University Portal by student-01</p>\r\n            </div>\r\n        ', '2026-04-08 14:11:12', 'sent');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `notifications`
+--
+
+CREATE TABLE `notifications` (
+  `notification_id` int(11) NOT NULL,
+  `sender_id` int(11) NOT NULL,
+  `recipient_id` int(11) NOT NULL,
+  `message` text NOT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `is_read` tinyint(1) DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+-- Table structure for table `activity_logs`
+-- Comprehensive audit trail for all actors
+-- --------------------------------------------------------
+
+CREATE TABLE `activity_logs` (
+  `activity_id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+  `user_id` INT NULL,
+  `actor_role` ENUM('student','teacher','community_supervisor','super_admin') NOT NULL,
+  `action_type` VARCHAR(80) NOT NULL,
+  `entity_type` VARCHAR(80) DEFAULT NULL,
+  `entity_id` INT DEFAULT NULL,
+  `action_details` JSON DEFAULT NULL,
+  `ip_address` VARCHAR(45) DEFAULT NULL,
+  `user_agent` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_user_created` (`user_id`, `created_at`),
+  INDEX `idx_action_type` (`action_type`, `created_at`),
+  INDEX `idx_entity` (`entity_type`, `entity_id`),
+  INDEX `idx_actor_role` (`actor_role`, `created_at`),
+  INDEX `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `notification_recipients`
+--
+
+CREATE TABLE `notification_recipients` (
+  `notification_id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `is_read` tinyint(1) DEFAULT 0,
+  `read_at` datetime DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `posts`
+--
+
+CREATE TABLE `posts` (
+  `post_id` int(11) NOT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `content` text DEFAULT NULL,
+  `image_data` longblob DEFAULT NULL,
+  `image_type` varchar(50) DEFAULT NULL,
+  `image_size` int(11) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `expires_at` datetime DEFAULT NULL,
+  `scope` varchar(20) DEFAULT 'department',
+  `status` enum('pending','approved','rejected') DEFAULT 'pending'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `post_reviews`
+--
+
+CREATE TABLE `post_reviews` (
+  `review_id` int(11) NOT NULL,
+  `post_id` int(11) NOT NULL,
+  `supervisor_id` int(11) NOT NULL,
+  `action` enum('approved','rejected') NOT NULL,
+  `rejection_reason` text DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+>>>>>>> 65134e5375267acdf2847b2e0b95d08dd01e6a40
 -- Table structure for table `student`
 --
 
