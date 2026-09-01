@@ -11,13 +11,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $password = $_POST['password'] ?? '';
     $submittedRollNumber = $rollNumber;
 
-    $stmt = $conn->prepare("SELECT s.student_id, s.Roll_no, s.name, u.user_id, u.password
-                            FROM student s
-                            INNER JOIN user u ON s.student_id = u.user_id
-                            WHERE s.Roll_no = ?");
-    $stmt->bind_param("s", $rollNumber);
-    $stmt->execute();
-    $result = $stmt->get_result();
+   $stmt = $conn->prepare("SELECT s.student_id, s.Roll_no, s.name, u.user_id, u.password
+                        FROM student s
+                        INNER JOIN user u ON s.student_id = u.user_id
+                        WHERE s.Roll_no = ?");
+
+if ($stmt === false) {
+    die("Prepare failed: " . $conn->error);
+}
+
+$stmt->bind_param("s", $rollNumber);
+$stmt->execute();
+$result = $stmt->get_result();
 
     if ($result->num_rows == 1) {
         $student = $result->fetch_assoc();
