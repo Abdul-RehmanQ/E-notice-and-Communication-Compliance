@@ -6,6 +6,37 @@ require_once __DIR__ . '/student_guard.php';
 $studentIdentity = requireStudentIdentity($conn);
 $studentUserId = (int)$studentIdentity['user_id'];
 
+$allDepartments = [
+    'Department of Electrical Engineering',
+    'Department of Civil Engineering',
+    'Department of Mechanical Engineering',
+    'Department of Software Engineering',
+    'Department of Computer Systems Engineering',
+    'Department of Computer Science & Information Technology (CSIT)',
+    'Department of Chemistry',
+    'Department of Zoology',
+    'Department of Physics',
+    'Department of Mathematics',
+    'Department of Biotechnology',
+    'Department of Statistics',
+    'Department of Environmental Sciences',
+    'Department of English',
+    'Department of Home Economics',
+    'Department of LAW',
+    'Department of Education',
+    'Department of International Relations',
+    'Department of Sociology',
+    'Department of Mass Communication',
+    'Department of Pharmacy',
+    'Department of Physiotherapy',
+    'Department of Allied Health Sciences',
+    'Department of Human Nutrition & Dietetics',
+    'Department of Microbiology',
+    'Department of Business Administration',
+    'Department of Banking and Finance',
+    'Department of Commerce'
+];
+
 $error = '';
 $success = '';
 
@@ -37,15 +68,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_post'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_post'])) {
-    $scope = $_POST['scope'] ?? 'department';
+    $scopeType = $_POST['scope'] ?? 'department';
     $content = trim($_POST['postContent'] ?? '');
     $expiresIn = (int)($_POST['expires_in'] ?? 15);
     $includeText = isset($_POST['include_text']);
     $includeImage = isset($_POST['include_image']);
 
-    if (!$includeText && !$includeImage) $error = "Please select at least one content type.";
-    elseif ($includeText && empty($content)) $error = "Please write a message for the post.";
-    elseif ($includeImage && (!isset($_FILES['postImage']) || $_FILES['postImage']['error'] == UPLOAD_ERR_NO_FILE)) $error = "Please select an image to upload.";
+    $scope = 'department';
+    if ($scopeType === 'specific') {
+        $specificDepts = $_POST['specific_departments'] ?? [];
+        if (empty($specificDepts)) {
+            $error = "Please select at least one department for specific scope.";
+        } else {
+            $scope = json_encode(array_values(array_unique($specificDepts)));
+        }
+    } elseif ($scopeType === 'all') {
+        $scope = 'all';
+    }
+
+    if (empty($error) && !$includeText && !$includeImage) $error = "Please select at least one content type.";
+    elseif (empty($error) && $includeText && empty($content)) $error = "Please write a message for the post.";
+    elseif (empty($error) && $includeImage && (!isset($_FILES['postImage']) || $_FILES['postImage']['error'] == UPLOAD_ERR_NO_FILE)) $error = "Please select an image to upload.";
     else {
         $imageData = null; $imageType = null; $imageSize = null;
         if ($includeImage && isset($_FILES['postImage']) && $_FILES['postImage']['error'] == UPLOAD_ERR_OK) {
@@ -85,9 +128,13 @@ $posts = [];
 $stmt = $conn->prepare("SELECT p.*, u.email, COALESCE(s.name, t.name) as poster_name, s.Roll_no as poster_roll, COALESCE(s.department, t.department) as poster_department
     FROM posts p LEFT JOIN user u ON p.user_id = u.user_id LEFT JOIN student s ON p.user_id = s.student_id LEFT JOIN teacher t ON p.user_id = t.teacher_id
     WHERE p.expires_at > NOW() AND p.status = 'approved'
-    AND (p.scope = 'all' OR (p.scope = 'department' AND (LOWER(TRIM(s.department)) = ? OR LOWER(TRIM(t.department)) = ?)))
+    AND (
+        p.scope = 'all' 
+        OR (p.scope = 'department' AND (LOWER(TRIM(s.department)) = ? OR LOWER(TRIM(t.department)) = ?))
+        OR (p.scope NOT IN ('all', 'department') AND JSON_CONTAINS(p.scope, JSON_QUOTE(?)))
+    )
     ORDER BY p.created_at DESC");
-$stmt->bind_param("ss", $studentDepartmentNormalized, $studentDepartmentNormalized);
+$stmt->bind_param("sss", $studentDepartmentNormalized, $studentDepartmentNormalized, $studentDepartmentNormalized);
 $stmt->execute();
 $result = $stmt->get_result();
 if ($result) while ($row = $result->fetch_assoc()) $posts[] = $row;
@@ -135,8 +182,10 @@ $stmt->close();
 </head>
 <body class="font-body-md text-on-surface">
 
+<div id="sidebarOverlay" class="fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden"></div>
+
 <!-- Sidebar -->
-<aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 shadow-xl shadow-black/20 flex flex-col z-50">
+<aside id="sidebar" class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 shadow-xl shadow-black/20 flex flex-col z-50 transition-transform duration-300 ease-in-out -translate-x-full lg:translate-x-0 lg:-translate-x-0">
     <div class="p-6">
         <div class="flex items-center gap-3 mb-8">
             <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-400/40 shrink-0">
@@ -167,22 +216,17 @@ $stmt->close();
 </aside>
 
 <!-- Top Bar -->
-<header class="fixed top-0 right-0 left-[280px] h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-8 z-40 shadow-sm">
-    <div class="flex items-center gap-4 flex-1">
-        <div class="relative w-full max-w-md">
-            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
-            <input class="w-full bg-white border border-slate-200 rounded-lg py-2 pl-10 pr-4 text-sm focus:ring-2 ring-blue-500/20 outline-none" placeholder="Search notices, students, or records..." type="text">
-        </div>
-    </div>
-    <div class="flex items-center gap-4">
-        <button class="hover:bg-slate-100 rounded-lg p-2 transition-all relative">
-            <span class="material-symbols-outlined text-slate-600">notifications</span>
+<header id="topHeader" class="fixed top-0 right-0 left-0 h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 lg:left-[280px] lg:px-8 z-40 shadow-sm transition-all duration-300 ease-in-out">
+    <div class="flex items-center gap-3 sm:gap-4 flex-1">
+        <button id="sidebarToggle" type="button" class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-100 hover:text-slate-900 lg:hidden" aria-label="Toggle sidebar">
+            <span class="material-symbols-outlined">menu</span>
         </button>
-        <div class="h-8 w-[1px] bg-slate-200"></div>
+    </div>
+    <div class="flex items-center gap-3">
         <div class="flex items-center gap-3">
             <div class="text-right">
                 <p class="text-sm font-bold text-slate-900 leading-none"><?php echo htmlspecialchars($student['name']); ?></p>
-                <p class="text-[10px] font-label-caps text-blue-600 uppercase mt-1">STUDENT · <?php echo htmlspecialchars($student['Roll_no']); ?></p>
+                <p class="text-[10px] font-label-caps tracking-[0.18em] text-blue-600 uppercase mt-1">Roll No. <?php echo htmlspecialchars($student['Roll_no']); ?></p>
             </div>
             <div class="w-9 h-9 rounded-full bg-secondary flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm">
                 <?php echo strtoupper(substr($student['name'], 0, 1)); ?>
@@ -192,7 +236,7 @@ $stmt->close();
 </header>
 
 <!-- Main Content -->
-<main class="ml-[280px] mt-16 p-6">
+<main id="mainContent" class="mt-16 p-4 sm:p-6 lg:ml-[280px]">
     <div class="max-w-5xl mx-auto space-y-6">
 
         <!-- Flash Messages -->
@@ -233,9 +277,10 @@ $stmt->close();
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-[10px] font-label-caps text-slate-500 mb-1">Post Scope</label>
-                                <select name="scope" class="w-full text-sm rounded-lg border border-slate-200 py-1.5 focus:ring-2 ring-blue-500/20 outline-none">
+                                <select name="scope" id="postScope" class="w-full text-sm rounded-lg border border-slate-200 py-1.5 focus:ring-2 ring-blue-500/20 outline-none" onchange="document.getElementById('specificDepartmentsContainer').classList.toggle('hidden', this.value !== 'specific')">
                                     <option value="department">Department Only</option>
                                     <option value="all">All University</option>
+                                    <option value="specific">Specific Departments</option>
                                 </select>
                             </div>
                             <div>
@@ -245,6 +290,17 @@ $stmt->close();
                                     <option value="15" selected>15 Days</option>
                                     <option value="30">30 Days</option>
                                 </select>
+                            </div>
+                        </div>
+                        <div id="specificDepartmentsContainer" class="hidden mt-2">
+                            <label class="block text-[10px] font-label-caps text-slate-500 mb-1">Select Departments</label>
+                            <div class="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1 bg-slate-50">
+                                <?php foreach ($allDepartments as $dept): ?>
+                                    <label class="flex items-center gap-1.5 cursor-pointer">
+                                        <input type="checkbox" name="specific_departments[]" value="<?php echo htmlspecialchars(mb_strtolower(trim($dept))); ?>" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500/20">
+                                        <span class="text-sm text-slate-700"><?php echo htmlspecialchars(trim($dept)); ?></span>
+                                    </label>
+                                <?php endforeach; ?>
                             </div>
                         </div>
                         <div class="flex items-center gap-3 text-sm">
@@ -346,7 +402,11 @@ $stmt->close();
                                     <div class="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
                                         <span><?php echo date('M d, Y h:i A', strtotime($post['created_at'])); ?></span>
                                         <span>•</span>
-                                        <span><?php echo $post['scope'] == 'all' ? 'All University' : 'Department Only'; ?></span>
+                                        <span><?php 
+                                            if ($post['scope'] === 'all') echo 'All University'; 
+                                            elseif ($post['scope'] === 'department') echo 'Department Only';
+                                            else echo 'Specific Departments';
+                                        ?></span>
                                         <?php
                                         $daysLeft = ceil((strtotime($post['expires_at']) - time()) / 86400);
                                         $badgeColor = $daysLeft <= 3 ? 'text-red-500' : 'text-slate-400';
@@ -374,6 +434,55 @@ $stmt->close();
 </main>
 
 <script>
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const mainContent = document.getElementById('mainContent');
+    const topHeader = document.getElementById('topHeader');
+    let mobileSidebarOpen = false;
+
+    function syncSidebarState() {
+        const isDesktop = window.innerWidth >= 1024;
+
+        if (isDesktop) {
+            sidebar.classList.remove('-translate-x-full');
+            sidebar.classList.add('translate-x-0');
+            sidebarOverlay.classList.add('hidden');
+            topHeader.classList.remove('left-0');
+            topHeader.classList.add('lg:left-[280px]');
+            mainContent.classList.remove('ml-0');
+            sidebarToggle.setAttribute('aria-expanded', 'true');
+            return;
+        }
+
+        sidebar.classList.toggle('-translate-x-full', !mobileSidebarOpen);
+        sidebar.classList.toggle('translate-x-0', mobileSidebarOpen);
+        sidebarOverlay.classList.toggle('hidden', !mobileSidebarOpen);
+        topHeader.classList.add('left-0');
+        topHeader.classList.remove('lg:left-[280px]');
+        mainContent.classList.add('ml-0');
+        sidebarToggle.setAttribute('aria-expanded', String(mobileSidebarOpen));
+    }
+
+    sidebarToggle.addEventListener('click', () => {
+        mobileSidebarOpen = !mobileSidebarOpen;
+        syncSidebarState();
+    });
+
+    sidebarOverlay.addEventListener('click', () => {
+        mobileSidebarOpen = false;
+        syncSidebarState();
+    });
+
+    window.addEventListener('resize', () => {
+        if (window.innerWidth >= 1024) {
+            mobileSidebarOpen = false;
+        }
+        syncSidebarState();
+    });
+
+    syncSidebarState();
+
     document.getElementById('includeImage').addEventListener('change', function() {
         document.getElementById('imageSection').classList.toggle('hidden', !this.checked);
         if (!this.checked) {

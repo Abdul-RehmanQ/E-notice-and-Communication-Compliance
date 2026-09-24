@@ -28,5 +28,7 @@ public/hot
 .DS_Store
 Thumbs.db
 
-# Database (Keep the directory, ignore the content if needed)
-# DB/*.sql
+# Database
+# Keep the folder but ignore local database files and dumps
+database/
+database/*.sql

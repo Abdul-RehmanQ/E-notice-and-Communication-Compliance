@@ -6,6 +6,37 @@ require_once __DIR__ . '/teacher_guard.php';
 $teacher = requireTeacherIdentity($conn);
 $teacherUserId = (int)$teacher['user_id'];
 
+$allDepartments = [
+    'Department of Electrical Engineering',
+    'Department of Civil Engineering',
+    'Department of Mechanical Engineering',
+    'Department of Software Engineering',
+    'Department of Computer Systems Engineering',
+    'Department of Computer Science & Information Technology (CSIT)',
+    'Department of Chemistry',
+    'Department of Zoology',
+    'Department of Physics',
+    'Department of Mathematics',
+    'Department of Biotechnology',
+    'Department of Statistics',
+    'Department of Environmental Sciences',
+    'Department of English',
+    'Department of Home Economics',
+    'Department of LAW',
+    'Department of Education',
+    'Department of International Relations',
+    'Department of Sociology',
+    'Department of Mass Communication',
+    'Department of Pharmacy',
+    'Department of Physiotherapy',
+    'Department of Allied Health Sciences',
+    'Department of Human Nutrition & Dietetics',
+    'Department of Microbiology',
+    'Department of Business Administration',
+    'Department of Banking and Finance',
+    'Department of Commerce'
+];
+
 $error = '';
 $success = '';
 
@@ -37,15 +68,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_post'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_post'])) {
-    $scope = $_POST['scope'] ?? 'department';
+    $scopeType = $_POST['scope'] ?? 'department';
     $content = trim($_POST['postContent'] ?? '');
     $expiresIn = (int)($_POST['expires_in'] ?? 15);
     $includeText = isset($_POST['include_text']);
     $includeImage = isset($_POST['include_image']);
 
-    if (!$includeText && !$includeImage) $error = "Please select at least one content type.";
-    elseif ($includeText && empty($content)) $error = "Please write a message for the post.";
-    elseif ($includeImage && (!isset($_FILES['postImage']) || $_FILES['postImage']['error'] == UPLOAD_ERR_NO_FILE)) $error = "Please select an image to upload.";
+    $scope = 'department';
+    if ($scopeType === 'specific') {
+        $specificDepts = $_POST['specific_departments'] ?? [];
+        if (empty($specificDepts)) {
+            $error = "Please select at least one department for specific scope.";
+        } else {
+            $scope = json_encode(array_values(array_unique($specificDepts)));
+        }
+    } elseif ($scopeType === 'all') {
+        $scope = 'all';
+    }
+
+    if (empty($error) && !$includeText && !$includeImage) $error = "Please select at least one content type.";
+    elseif (empty($error) && $includeText && empty($content)) $error = "Please write a message for the post.";
+    elseif (empty($error) && $includeImage && (!isset($_FILES['postImage']) || $_FILES['postImage']['error'] == UPLOAD_ERR_NO_FILE)) $error = "Please select an image to upload.";
     else {
         $imageData = null; $imageType = null; $imageSize = null;
         if ($includeImage && isset($_FILES['postImage']) && $_FILES['postImage']['error'] == UPLOAD_ERR_OK) {
@@ -78,9 +121,13 @@ $posts = [];
 $stmt = $conn->prepare("SELECT p.*, u.email, COALESCE(s.name, t.name) as poster_name, s.Roll_no as poster_roll, COALESCE(s.department, t.department) as poster_department
     FROM posts p LEFT JOIN user u ON p.user_id = u.user_id LEFT JOIN student s ON p.user_id = s.student_id LEFT JOIN teacher t ON p.user_id = t.teacher_id
     WHERE p.expires_at > NOW() AND p.status = 'approved'
-    AND (p.scope = 'all' OR (p.scope = 'department' AND (LOWER(TRIM(s.department)) = ? OR LOWER(TRIM(t.department)) = ?)))
+    AND (
+        p.scope = 'all' 
+        OR (p.scope = 'department' AND (LOWER(TRIM(s.department)) = ? OR LOWER(TRIM(t.department)) = ?))
+        OR (p.scope NOT IN ('all', 'department') AND JSON_CONTAINS(p.scope, JSON_QUOTE(?)))
+    )
     ORDER BY p.created_at DESC");
-$stmt->bind_param("ss", $teacherDepartmentNormalized, $teacherDepartmentNormalized);
+$stmt->bind_param("sss", $teacherDepartmentNormalized, $teacherDepartmentNormalized, $teacherDepartmentNormalized);
 $stmt->execute();
 $result = $stmt->get_result();
 if ($result) while ($row = $result->fetch_assoc()) $posts[] = $row;
@@ -221,9 +268,10 @@ $stmt->close();
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-[10px] font-label-caps text-slate-500 mb-1">Post Scope</label>
-                                <select name="scope" class="w-full text-sm rounded-lg border border-slate-200 py-1.5 focus:ring-2 ring-blue-500/20 outline-none">
+                                <select name="scope" id="postScope" class="w-full text-sm rounded-lg border border-slate-200 py-1.5 focus:ring-2 ring-blue-500/20 outline-none" onchange="document.getElementById('specificDepartmentsContainer').classList.toggle('hidden', this.value !== 'specific')">
                                     <option value="department">Department Only</option>
                                     <option value="all">All University</option>
+                                    <option value="specific">Specific Departments</option>
                                 </select>
                             </div>
                             <div>
@@ -233,6 +281,17 @@ $stmt->close();
                                     <option value="15" selected>15 Days</option>
                                     <option value="30">30 Days</option>
                                 </select>
+                            </div>
+                        </div>
+                        <div id="specificDepartmentsContainer" class="hidden mt-2">
+                            <label class="block text-[10px] font-label-caps text-slate-500 mb-1">Select Departments</label>
+                            <div class="max-h-32 overflow-y-auto border border-slate-200 rounded-lg p-2 space-y-1 bg-slate-50">
+                                <?php foreach ($allDepartments as $dept): ?>
+                                    <label class="flex items-center gap-1.5 cursor-pointer">
+                                        <input type="checkbox" name="specific_departments[]" value="<?php echo htmlspecialchars(mb_strtolower(trim($dept))); ?>" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500/20">
+                                        <span class="text-sm text-slate-700"><?php echo htmlspecialchars(trim($dept)); ?></span>
+                                    </label>
+                                <?php endforeach; ?>
                             </div>
                         </div>
                         <div class="flex items-center gap-3 text-sm">
@@ -332,7 +391,11 @@ $stmt->close();
                                     <div class="flex items-center gap-2 text-[11px] text-slate-400 mt-0.5">
                                         <span><?php echo date('M d, Y h:i A', strtotime($post['created_at'])); ?></span>
                                         <span>•</span>
-                                        <span><?php echo $post['scope'] == 'all' ? 'All University' : 'Department Only'; ?></span>
+                                        <span><?php 
+                                            if ($post['scope'] === 'all') echo 'All University'; 
+                                            elseif ($post['scope'] === 'department') echo 'Department Only';
+                                            else echo 'Specific Departments';
+                                        ?></span>
                                         <?php $daysLeft = ceil((strtotime($post['expires_at']) - time()) / 86400); ?>
                                         <span class="<?php echo $daysLeft <= 3 ? 'text-red-500' : 'text-slate-400'; ?>">· Expires in <?php echo $daysLeft; ?>d</span>
                                     </div>

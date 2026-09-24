@@ -1,0 +1,24 @@
+Options -Indexes
+
+# Protect configuration files
+<FilesMatch "^(config\.php|email_config\.php)$">
+    Require all denied
+</FilesMatch>
+
+# Protect database dumps/backups
+<FilesMatch "\.(sql|sql\.gz|bak|backup)$">
+    Require all denied
+</FilesMatch>
+
+# Protect debug/test scripts
+<FilesMatch "^(test_db_debug\.php|test_logging\.php)$">
+    Require all denied
+</FilesMatch>
+
+# Protect Git metadata
+RedirectMatch 404 /\.git
+
+# Protect hidden files
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>

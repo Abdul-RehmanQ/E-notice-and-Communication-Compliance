@@ -225,8 +225,10 @@ $currentEmail = (string)($studentIdentity['email'] ?? '');
 
 <body class="bg-[#F8FAFC] font-body-md text-on-surface">
 
+    <div id="sidebarOverlay" class="fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden"></div>
+
     <!-- Sidebar -->
-    <aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl">
+    <aside id="sidebar" class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl transition-transform duration-300 ease-in-out -translate-x-full lg:translate-x-0 lg:-translate-x-0">
         <div class="p-6 flex items-center gap-3">
             <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-400/40 shrink-0">
                 <img src="../assets/images/must_logo.png" alt="MUST Logo" class="w-full h-full object-cover">
@@ -255,18 +257,18 @@ $currentEmail = (string)($studentIdentity['email'] ?? '');
     </aside>
 
     <!-- Top Bar -->
-    <header class="fixed top-0 right-0 left-[280px] h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-8 z-40 shadow-sm">
-        <div class="flex items-center gap-4">
-            <h2 class="text-slate-900 font-black text-lg font-h2">Account Settings</h2>
-        </div>
-        <div class="flex items-center gap-4">
-            <button class="hover:bg-slate-100 rounded-lg p-2 transition-all relative">
-                <span class="material-symbols-outlined text-slate-600">notifications</span>
+    <header id="topHeader" class="fixed top-0 right-0 left-0 h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 lg:left-[280px] lg:px-8 z-40 shadow-sm transition-all duration-300 ease-in-out">
+        <div class="flex items-center gap-3 sm:gap-4 flex-1">
+            <button id="sidebarToggle" type="button" class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-100 hover:text-slate-900 lg:hidden" aria-label="Toggle sidebar">
+                <span class="material-symbols-outlined">menu</span>
             </button>
-            <div class="flex items-center gap-3 pl-4 border-l border-slate-200">
-                <div class="text-right">
+            <h2 class="text-slate-900 font-black text-base sm:text-lg font-h2">Account Settings</h2>
+        </div>
+        <div class="flex items-center gap-3 sm:gap-4">
+            <div class="flex items-center gap-3">
+                <div class="text-right hidden sm:block">
                     <p class="font-bold text-slate-900 text-sm font-h3 leading-none"><?php echo htmlspecialchars($student['name']); ?></p>
-                    <span class="bg-secondary/10 text-secondary text-[10px] px-2 py-0.5 rounded font-label-caps uppercase">Student</span>
+                    <span class="block bg-secondary/10 text-secondary text-[10px] px-2 py-0.5 rounded font-label-caps tracking-[0.18em] uppercase">Roll No. <?php echo htmlspecialchars($student['Roll_no']); ?></span>
                 </div>
                 <div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm">
                     <?php echo strtoupper(substr($student['name'], 0, 1)); ?>
@@ -276,9 +278,8 @@ $currentEmail = (string)($studentIdentity['email'] ?? '');
     </header>
 
     <!-- Main Content -->
-    <main class="ml-[280px] mt-16 p-6 min-h-screen">
+    <main id="mainContent" class="mt-16 p-4 sm:p-6 lg:ml-[280px] min-h-screen">
         <div class="max-w-5xl mx-auto space-y-6">
-
             <!-- Breadcrumb -->
             <nav class="flex items-center gap-2 text-on-primary-container font-body-sm text-sm">
                 <a class="hover:text-secondary" href="dashboard.php">Dashboard</a>
@@ -291,16 +292,16 @@ $currentEmail = (string)($studentIdentity['email'] ?? '');
                 <div class="h-28 w-full bg-gradient-to-r from-[#131b2e] to-[#0040e0] relative">
                     <div class="absolute inset-0 bg-secondary/40 backdrop-blur-[2px]"></div>
                 </div>
-                <div class="px-8 pb-6 -mt-10 relative flex flex-col md:flex-row items-end gap-6">
+                <div class="px-4 pb-6 pt-2 -mt-10 relative flex flex-col items-center text-center md:flex-row md:items-end md:text-left md:px-8 md:gap-6">
                     <div class="w-24 h-24 rounded-xl border-4 border-white shadow-lg bg-secondary flex items-center justify-center text-white text-3xl font-bold">
                         <?php echo strtoupper(substr($student['name'], 0, 1)); ?>
                     </div>
                     <div class="flex-1 pb-2">
-                        <div class="flex items-center gap-3">
+                        <div class="flex flex-col items-center gap-3 md:flex-row md:items-center md:justify-start">
                             <h1 class="font-h1 text-2xl font-bold text-on-surface"><?php echo htmlspecialchars($student['name']); ?></h1>
                             <span class="bg-surface-container-high text-on-surface-variant text-[10px] px-2 py-1 rounded font-bold uppercase tracking-widest">Active</span>
                         </div>
-                        <div class="flex flex-wrap gap-x-6 gap-y-1 mt-1 text-on-primary-container text-sm">
+                        <div class="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-2 text-on-primary-container text-sm md:justify-start">
                             <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-lg">badge</span><?php echo htmlspecialchars($student['Roll_no']); ?></span>
                             <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-lg">domain</span><?php echo htmlspecialchars($student['department']); ?></span>
                             <span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-lg">calendar_month</span><?php echo htmlspecialchars($student['session']); ?></span>
@@ -423,6 +424,54 @@ $currentEmail = (string)($studentIdentity['email'] ?? '');
             </div>
         </footer>
     </main>
+    <script>
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const topHeader = document.getElementById('topHeader');
+        const mainContent = document.getElementById('mainContent');
+        let mobileSidebarOpen = false;
+
+        function syncSidebarState() {
+            const isDesktop = window.innerWidth >= 1024;
+
+            if (isDesktop) {
+                sidebar.classList.remove('-translate-x-full');
+                sidebar.classList.add('translate-x-0');
+                sidebarOverlay.classList.add('hidden');
+                topHeader.classList.remove('left-0');
+                topHeader.classList.add('lg:left-[280px]');
+                mainContent.classList.remove('ml-0');
+                return;
+            }
+
+            sidebar.classList.toggle('-translate-x-full', !mobileSidebarOpen);
+            sidebar.classList.toggle('translate-x-0', mobileSidebarOpen);
+            sidebarOverlay.classList.toggle('hidden', !mobileSidebarOpen);
+            topHeader.classList.add('left-0');
+            topHeader.classList.remove('lg:left-[280px]');
+            mainContent.classList.add('ml-0');
+        }
+
+        sidebarToggle.addEventListener('click', () => {
+            mobileSidebarOpen = !mobileSidebarOpen;
+            syncSidebarState();
+        });
+
+        sidebarOverlay.addEventListener('click', () => {
+            mobileSidebarOpen = false;
+            syncSidebarState();
+        });
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth >= 1024) {
+                mobileSidebarOpen = false;
+            }
+            syncSidebarState();
+        });
+
+        syncSidebarState();
+    </script>
 </body>
 
 </html>

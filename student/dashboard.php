@@ -273,9 +273,11 @@ $newNoticeCount = count($notifications);
 
 <body class="font-body-md text-on-surface">
 
+    <div id="sidebarOverlay" class="fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden"></div>
+
     <!-- Fixed Sidebar -->
-    <aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 shadow-xl shadow-black/20 flex flex-col z-50">
-        <div class="p-6 flex items-center gap-3">
+    <aside id="sidebar" class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 shadow-xl shadow-black/20 flex flex-col z-50 transition-transform duration-300 ease-in-out overflow-hidden -translate-x-full lg:translate-x-0 lg:-translate-x-0">
+        <div class="p-6 flex items-center gap-3 w-[280px] shrink-0">
             <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-400/40 shrink-0">
                 <img src="../assets/images/must_logo.png" alt="MUST Logo" class="w-full h-full object-cover">
             </div>
@@ -303,31 +305,19 @@ $newNoticeCount = count($notifications);
     </aside>
 
     <!-- Main Content Area -->
-    <main class="ml-[280px] min-h-screen">
+    <main id="mainContent" class="min-h-screen transition-all duration-300 ease-in-out lg:ml-[280px]">
         <!-- Top Bar -->
-        <header class="fixed top-0 right-0 left-[280px] h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-8 z-40">
-            <div class="flex items-center gap-4 flex-1">
-                <div class="relative w-full max-w-md">
-                    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
-                    <input class="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-secondary/20 outline-none transition-all" placeholder="Search notices or records..." type="text">
-                </div>
+        <header id="topHeader" class="fixed top-0 right-0 left-0 h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 lg:left-[280px] lg:px-8 z-40 transition-all duration-300 ease-in-out">
+            <div class="flex items-center gap-3 sm:gap-4 flex-1">
+                <button id="sidebarToggle" type="button" class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-100 hover:text-slate-900 lg:hidden" aria-label="Toggle sidebar">
+                    <span class="material-symbols-outlined">menu</span>
+                </button>
             </div>
-            <div class="flex items-center gap-6">
-                <div class="flex items-center gap-4 border-r border-slate-200 pr-6">
-                    <button class="text-slate-500 hover:bg-slate-100 p-2 rounded-lg transition-all relative">
-                        <span class="material-symbols-outlined">notifications</span>
-                        <?php if ($newNoticeCount > 0): ?>
-                            <span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
-                        <?php endif; ?>
-                    </button>
-                    <button class="text-slate-500 hover:bg-slate-100 p-2 rounded-lg transition-all">
-                        <span class="material-symbols-outlined">help_center</span>
-                    </button>
-                </div>
-                <div class="flex items-center gap-3 pl-2">
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3">
                     <div class="text-right">
                         <p class="font-h3 text-sm text-slate-900 leading-none"><?php echo htmlspecialchars($student['name']); ?></p>
-                        <p class="font-label-caps text-[10px] text-secondary mt-1">ROLL: <?php echo htmlspecialchars($student['Roll_no']); ?></p>
+                        <p class="font-label-caps text-[10px] tracking-[0.18em] text-secondary mt-1 uppercase">Roll No. <?php echo htmlspecialchars($student['Roll_no']); ?></p>
                     </div>
                     <div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm">
                         <?php echo strtoupper(substr($student['name'], 0, 1)); ?>
@@ -337,7 +327,7 @@ $newNoticeCount = count($notifications);
         </header>
 
         <!-- Content Canvas -->
-        <div class="pt-24 px-8 pb-12">
+        <div class="pt-20 px-4 pb-10 sm:pt-24 sm:px-6 lg:px-8 lg:pb-12">
 
             <!-- Flash Messages -->
             <?php if ($error): ?>
@@ -359,7 +349,7 @@ $newNoticeCount = count($notifications);
             <!-- Bento Dashboard Grid -->
             <div class="grid grid-cols-12 gap-6 mb-8">
                 <!-- Profile Summary Card -->
-                <div class="col-span-12 lg:col-span-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-secondary">
+                <div class="col-span-12 lg:col-span-4 bg-white p-4 sm:p-6 rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-secondary">
                     <div class="flex justify-between items-start mb-6">
                         <h2 class="font-h2 text-xl text-slate-900">Student Profile</h2>
                         <span class="bg-secondary/10 text-secondary px-2 py-1 rounded text-[10px] font-bold tracking-wider">ACTIVE</span>
@@ -395,7 +385,7 @@ $newNoticeCount = count($notifications);
                 </div>
 
                 <!-- Notifications / E-Notices -->
-                <div class="col-span-12 lg:col-span-8 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                <div class="col-span-12 lg:col-span-8 bg-white p-4 sm:p-6 rounded-xl border border-slate-200 shadow-sm">
                     <div class="flex items-center justify-between mb-6">
                         <div class="flex items-center gap-2">
                             <h2 class="font-h2 text-xl text-slate-900">Recent Notices</h2>
@@ -406,18 +396,18 @@ $newNoticeCount = count($notifications);
                     </div>
 
                     <!-- Filters: date range + subject search -->
-                    <form method="GET" class="mb-4 flex flex-wrap items-end gap-3 w-full">
-                        <div class="flex items-center gap-2">
+                    <form method="GET" class="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5 xl:items-end w-full">
+                        <div class="flex flex-col gap-2">
                             <label class="text-[11px] text-slate-500">From</label>
-                            <input type="date" name="from_date" value="<?php echo htmlspecialchars($_GET['from_date'] ?? ''); ?>" class="px-2 py-1 border rounded text-sm w-[140px]">
+                            <input type="date" name="from_date" value="<?php echo htmlspecialchars($_GET['from_date'] ?? ''); ?>" class="px-2 py-2 border rounded text-sm w-full h-10">
                         </div>
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-col gap-2">
                             <label class="text-[11px] text-slate-500">To</label>
-                            <input type="date" name="to_date" value="<?php echo htmlspecialchars($_GET['to_date'] ?? ''); ?>" class="px-2 py-1 border rounded text-sm w-[140px]">
+                            <input type="date" name="to_date" value="<?php echo htmlspecialchars($_GET['to_date'] ?? ''); ?>" class="px-2 py-2 border rounded text-sm w-full h-10">
                         </div>
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-col gap-2 xl:col-span-2">
                             <label class="text-[11px] text-slate-500">Subject</label>
-                            <select name="offering_filter" class="px-3 py-2 border rounded text-sm w-full max-w-[280px]">
+                            <select name="offering_filter" class="px-3 py-2 border rounded text-sm w-full h-10">
                                 <option value="">All Subjects</option>
                                 <?php foreach ($enrolledOfferings as $eo): ?>
                                     <option value="<?php echo (int)$eo['offering_id']; ?>" <?php echo (isset($_GET['offering_filter']) && (int)$_GET['offering_filter'] === (int)$eo['offering_id']) ? 'selected' : ''; ?>>
@@ -426,12 +416,13 @@ $newNoticeCount = count($notifications);
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="flex items-center gap-2 flex-1 min-w-[220px]">
-                            <input type="text" name="message_search" placeholder="Filter by subject or text..." value="<?php echo htmlspecialchars($_GET['message_search'] ?? ''); ?>" class="w-full px-3 py-2 border rounded text-sm min-w-0">
+                        <div class="flex flex-col gap-2 xl:col-span-2">
+                            <label class="text-[11px] text-slate-500">Text</label>
+                            <input type="text" name="message_search" placeholder="Filter by subject or text..." value="<?php echo htmlspecialchars($_GET['message_search'] ?? ''); ?>" class="w-full px-3 py-2 border rounded text-sm min-w-0 h-10">
                         </div>
-                        <div class="flex items-center gap-2">
-                            <button type="submit" class="px-3 py-2 bg-secondary text-white rounded text-sm">Filter</button>
-                            <a href="dashboard.php" class="px-3 py-2 border rounded text-sm">Clear</a>
+                        <div class="flex items-end gap-2 md:col-span-2 xl:col-span-1">
+                            <button type="submit" class="px-3 py-2 bg-secondary text-white rounded text-sm h-10 w-full">Filter</button>
+                            <a href="dashboard.php" class="px-3 py-2 border rounded text-sm h-10 flex items-center justify-center w-full">Clear</a>
                         </div>
                     </form>
 
@@ -513,9 +504,56 @@ $newNoticeCount = count($notifications);
     </div>
 
     <script>
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const mainContent = document.getElementById('mainContent');
+        const topHeader = document.getElementById('topHeader');
+        const sidebarToggle = document.getElementById('sidebarToggle');
         const replyModal = document.getElementById('replyModal');
         const closeModal = document.getElementById('closeModal');
         const cancelModal = document.getElementById('cancelModal');
+
+        let mobileSidebarOpen = false;
+
+        function syncSidebarState() {
+            const isDesktop = window.innerWidth >= 1024;
+
+            if (isDesktop) {
+                sidebar.classList.remove('-translate-x-full');
+                sidebar.classList.add('translate-x-0');
+                sidebarOverlay.classList.add('hidden');
+                mainContent.classList.remove('ml-0');
+                topHeader.classList.remove('left-0');
+                topHeader.classList.add('lg:left-[280px]');
+                return;
+            }
+
+            sidebar.classList.toggle('-translate-x-full', !mobileSidebarOpen);
+            sidebar.classList.toggle('translate-x-0', mobileSidebarOpen);
+            sidebarOverlay.classList.toggle('hidden', !mobileSidebarOpen);
+            mainContent.classList.add('ml-0');
+            topHeader.classList.add('left-0');
+            topHeader.classList.remove('lg:left-[280px]');
+        }
+
+        sidebarToggle.addEventListener('click', () => {
+            mobileSidebarOpen = !mobileSidebarOpen;
+            syncSidebarState();
+        });
+
+        sidebarOverlay.addEventListener('click', () => {
+            mobileSidebarOpen = false;
+            syncSidebarState();
+        });
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth >= 1024) {
+                mobileSidebarOpen = false;
+            }
+            syncSidebarState();
+        });
+
+        syncSidebarState();
 
         document.querySelectorAll('.open-reply-modal').forEach(btn => {
             btn.addEventListener('click', function() {
