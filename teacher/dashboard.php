@@ -263,8 +263,10 @@ logActivity($conn, $teacher['user_id'] ?? null, 'teacher', 'view', 'notification
 
 <body class="font-body-md text-on-surface">
 
+    <div id="sidebarOverlay" class="fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden"></div>
+
     <!-- Sidebar -->
-    <aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl">
+    <aside id="sidebar" class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl transition-transform duration-300 ease-in-out -translate-x-full lg:translate-x-0 lg:-translate-x-0">
         <div class="p-6 flex items-center gap-3">
             <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-400/40 shrink-0">
                 <img src="../assets/images/must_logo.png" alt="MUST Logo" class="w-full h-full object-cover">
@@ -293,30 +295,17 @@ logActivity($conn, $teacher['user_id'] ?? null, 'teacher', 'view', 'notification
     </aside>
 
     <!-- Top Bar -->
-    <header class="fixed top-0 right-0 left-[280px] h-16 border-b border-slate-200 bg-[#F8FAFC] flex items-center justify-between px-8 z-40 shadow-sm">
-        <div class="flex items-center gap-4 w-1/3">
-            <div class="relative w-full">
-                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
-                <input class="w-full bg-white border border-slate-200 rounded-lg py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none font-body-sm" placeholder="Search records, notices, or students..." type="text">
-            </div>
+    <header id="topHeader" class="fixed top-0 right-0 left-0 h-16 border-b border-slate-200 bg-[#F8FAFC] flex items-center justify-between px-4 sm:px-6 z-40 shadow-sm transition-all duration-300 ease-in-out lg:left-[280px] lg:px-8">
+        <div class="flex items-center gap-3 flex-1">
+            <button id="sidebarToggle" type="button" class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-100 hover:text-slate-900 lg:hidden" aria-label="Toggle sidebar">
+                <span class="material-symbols-outlined">menu</span>
+            </button>
         </div>
-        <div class="flex items-center gap-6">
-            <div class="flex items-center gap-2">
-                <button class="hover:bg-slate-100 rounded-lg p-2 transition-all relative">
-                    <span class="material-symbols-outlined text-slate-600">notifications</span>
-                    <?php if (!empty($sentNotifications)): ?>
-                        <span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
-                    <?php endif; ?>
-                </button>
-                <button class="hover:bg-slate-100 rounded-lg p-2 transition-all">
-                    <span class="material-symbols-outlined text-slate-600">help_center</span>
-                </button>
-            </div>
-            <div class="h-8 w-[1px] bg-slate-200"></div>
+        <div class="flex items-center gap-3">
             <div class="flex items-center gap-3">
                 <div class="text-right">
                     <p class="text-slate-900 font-bold text-sm font-body-sm leading-tight"><?php echo htmlspecialchars($teacher['name']); ?></p>
-                    <span class="text-[10px] font-label-caps bg-secondary/10 text-secondary px-2 py-0.5 rounded border border-secondary/20">FACULTY</span>
+                    <span class="text-[10px] font-label-caps tracking-[0.18em] bg-secondary/10 text-secondary px-2 py-0.5 rounded border border-secondary/20 uppercase">Faculty</span>
                 </div>
                 <div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm">
                     <?php echo strtoupper(substr($teacher['name'], 0, 1)); ?>
@@ -326,7 +315,7 @@ logActivity($conn, $teacher['user_id'] ?? null, 'teacher', 'view', 'notification
     </header>
 
     <!-- Main Content -->
-    <main class="ml-[280px] mt-16 p-8 min-h-screen">
+    <main id="mainContent" class="mt-16 p-4 sm:p-6 lg:ml-[280px] lg:mt-16 lg:p-8 min-h-screen transition-all duration-300 ease-in-out">
         <!-- Header -->
         <div class="mb-8">
             <h2 class="font-h2 text-2xl font-bold text-slate-900 mb-1">E-Notice Management</h2>
@@ -428,20 +417,20 @@ logActivity($conn, $teacher['user_id'] ?? null, 'teacher', 'view', 'notification
 
                     <!-- Filters for history -->
                     <div class="p-4 border-b border-slate-100 bg-slate-50">
-                        <form method="GET" class="flex flex-wrap gap-3 items-center">
-                            <div class="flex items-center gap-2">
-                                <label class="text-[11px] text-slate-500">From</label>
-                                <input type="date" name="from_date" value="<?php echo htmlspecialchars($_GET['from_date'] ?? ''); ?>" class="px-2 py-1 border rounded text-sm">
+                        <form method="GET" class="flex flex-wrap items-center gap-3">
+                            <div class="flex min-w-[140px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                                <label class="text-[11px] font-medium text-slate-500">From</label>
+                                <input type="date" name="from_date" value="<?php echo htmlspecialchars($_GET['from_date'] ?? ''); ?>" class="w-full border-0 bg-transparent p-0 text-sm text-slate-700 outline-none focus:ring-0">
                             </div>
-                            <div class="flex items-center gap-2">
-                                <label class="text-[11px] text-slate-500">To</label>
-                                <input type="date" name="to_date" value="<?php echo htmlspecialchars($_GET['to_date'] ?? ''); ?>" class="px-2 py-1 border rounded text-sm">
+                            <div class="flex min-w-[140px] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                                <label class="text-[11px] font-medium text-slate-500">To</label>
+                                <input type="date" name="to_date" value="<?php echo htmlspecialchars($_GET['to_date'] ?? ''); ?>" class="w-full border-0 bg-transparent p-0 text-sm text-slate-700 outline-none focus:ring-0">
                             </div>
-                            <div class="flex items-center gap-2">
-                                <input type="text" name="message_search" placeholder="Filter by text..." value="<?php echo htmlspecialchars($_GET['message_search'] ?? ''); ?>" class="px-3 py-2 border rounded text-sm">
+                            <div class="min-w-[180px] flex-1">
+                                <input type="text" name="message_search" placeholder="Filter by text..." value="<?php echo htmlspecialchars($_GET['message_search'] ?? ''); ?>" class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:ring-2 focus:ring-secondary/20">
                             </div>
-                            <div class="flex items-center gap-2">
-                                <select name="offering_filter" class="px-3 py-2 border rounded text-sm">
+                            <div class="min-w-[180px] flex-1">
+                                <select name="offering_filter" class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none focus:ring-2 focus:ring-secondary/20">
                                     <option value="">All Offerings</option>
                                     <?php foreach ($assignedCourses as $c): ?>
                                         <option value="<?php echo (int)$c['offering_id']; ?>" <?php echo (isset($_GET['offering_filter']) && (int)$_GET['offering_filter'] === (int)$c['offering_id']) ? 'selected' : ''; ?>>
@@ -450,8 +439,8 @@ logActivity($conn, $teacher['user_id'] ?? null, 'teacher', 'view', 'notification
                                 </select>
                             </div>
                             <div class="flex items-center gap-2">
-                                <button type="submit" class="px-3 py-2 bg-secondary text-white rounded text-sm">Filter</button>
-                                <a href="dashboard.php" class="px-3 py-2 border rounded text-sm">Clear</a>
+                                <button type="submit" class="rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700">Filter</button>
+                                <a href="dashboard.php" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm transition hover:bg-slate-100">Clear</a>
                             </div>
                         </form>
                     </div>
@@ -529,6 +518,54 @@ logActivity($conn, $teacher['user_id'] ?? null, 'teacher', 'view', 'notification
             </div>
         </div>
     </main>
+    <script>
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const topHeader = document.getElementById('topHeader');
+        const mainContent = document.getElementById('mainContent');
+        let mobileSidebarOpen = false;
+
+        function syncSidebarState() {
+            const isDesktop = window.innerWidth >= 1024;
+
+            if (isDesktop) {
+                sidebar.classList.remove('-translate-x-full');
+                sidebar.classList.add('translate-x-0');
+                sidebarOverlay.classList.add('hidden');
+                topHeader.classList.remove('left-0');
+                topHeader.classList.add('lg:left-[280px]');
+                mainContent.classList.remove('ml-0');
+                return;
+            }
+
+            sidebar.classList.toggle('-translate-x-full', !mobileSidebarOpen);
+            sidebar.classList.toggle('translate-x-0', mobileSidebarOpen);
+            sidebarOverlay.classList.toggle('hidden', !mobileSidebarOpen);
+            topHeader.classList.add('left-0');
+            topHeader.classList.remove('lg:left-[280px]');
+            mainContent.classList.add('ml-0');
+        }
+
+        sidebarToggle.addEventListener('click', () => {
+            mobileSidebarOpen = !mobileSidebarOpen;
+            syncSidebarState();
+        });
+
+        sidebarOverlay.addEventListener('click', () => {
+            mobileSidebarOpen = false;
+            syncSidebarState();
+        });
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth >= 1024) {
+                mobileSidebarOpen = false;
+            }
+            syncSidebarState();
+        });
+
+        syncSidebarState();
+    </script>
 </body>
 
 </html>

@@ -170,8 +170,9 @@ $actionStmt->close();
 </head>
 <body class="text-slate-800">
 
-<!-- ── Sidebar ── -->
-<aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl">
+<div id="sidebarOverlay" class="fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden"></div>
+
+<aside id="sidebar" class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl transition-transform duration-300 ease-in-out -translate-x-full lg:translate-x-0 lg:-translate-x-0">
     <div class="p-6 flex items-center gap-3">
         <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-400/40 shrink-0">
             <img src="../assets/images/must_logo.png" alt="MUST Logo" class="w-full h-full object-cover">
@@ -202,13 +203,12 @@ $actionStmt->close();
     </div>
 </aside>
 
-<!-- ── Top Bar ── -->
-<header class="fixed top-0 right-0 left-[280px] h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-8 z-40 shadow-sm">
-    <div class="flex items-center gap-3">
+<header id="topHeader" class="fixed top-0 right-0 left-0 h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-40 shadow-sm transition-all duration-300 ease-in-out lg:left-[280px] lg:px-8">
+    <div class="flex items-center gap-3 flex-1">
+        <button id="sidebarToggle" type="button" class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-100 hover:text-slate-900 lg:hidden" aria-label="Toggle sidebar">
+            <span class="material-symbols-outlined">menu</span>
+        </button>
         <h2 class="text-slate-900 font-black text-lg font-sora">Audit Logs</h2>
-        <span class="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-100 text-[11px] font-bold uppercase tracking-wider">
-            <span class="w-2 h-2 bg-blue-500 rounded-full"></span>Super Admin
-        </span>
     </div>
     <div class="flex items-center gap-3">
         <div class="text-right">
@@ -221,8 +221,7 @@ $actionStmt->close();
     </div>
 </header>
 
-<!-- ── Main Content ── -->
-<main class="ml-[280px] mt-16 p-6 min-h-screen">
+<main id="mainContent" class="mt-16 p-4 sm:p-6 lg:ml-[280px] lg:mt-16 min-h-screen transition-all duration-300 ease-in-out">
     <div class="max-w-7xl mx-auto space-y-6">
 
         <!-- Breadcrumb -->
@@ -234,8 +233,7 @@ $actionStmt->close();
 
         <!-- Filters Section -->
         <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-            <form method="GET" action="" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                <!-- Search -->
+            <form method="GET" action="" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 items-end">
                 <div>
                     <label for="search" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Search User</label>
                     <div class="relative">
@@ -243,15 +241,14 @@ $actionStmt->close();
                         <input type="text" id="search" name="search"
                             value="<?php echo htmlspecialchars($filterSearch); ?>"
                             placeholder="Name or Email…"
-                            class="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
+                            class="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
                     </div>
                 </div>
 
-                <!-- Role filter -->
                 <div>
                     <label for="role" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Role</label>
                     <select id="role" name="role"
-                        class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
+                        class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
                         <option value="">All Roles</option>
                         <option value="student" <?php echo $filterRole === 'student' ? 'selected' : ''; ?>>Student</option>
                         <option value="teacher" <?php echo $filterRole === 'teacher' ? 'selected' : ''; ?>>Teacher</option>
@@ -260,11 +257,10 @@ $actionStmt->close();
                     </select>
                 </div>
 
-                <!-- Action Type Filter -->
                 <div>
                     <label for="action_type" class="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Action</label>
                     <select id="action_type" name="action_type"
-                        class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
+                        class="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
                         <option value="">All Actions</option>
                         <?php foreach ($actionTypes as $type): ?>
                             <option value="<?php echo htmlspecialchars($type); ?>" <?php echo $filterAction === $type ? 'selected' : ''; ?>>
@@ -274,21 +270,19 @@ $actionStmt->close();
                     </select>
                 </div>
 
-                <!-- Date Range -->
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label for="date_from" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">From</label>
                         <input type="date" id="date_from" name="date_from" value="<?php echo htmlspecialchars($filterDateFrom); ?>"
-                            class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
+                            class="w-full border border-slate-200 rounded-lg px-2 py-2.5 text-xs focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
                     </div>
                     <div>
                         <label for="date_to" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-2">To</label>
                         <input type="date" id="date_to" name="date_to" value="<?php echo htmlspecialchars($filterDateTo); ?>"
-                            class="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
+                            class="w-full border border-slate-200 rounded-lg px-2 py-2.5 text-xs focus:ring-2 focus:ring-blue-500/20 outline-none bg-slate-50">
                     </div>
                 </div>
 
-                <!-- Action Buttons -->
                 <div class="flex gap-2 shrink-0">
                     <button type="submit"
                         class="flex-1 flex items-center justify-center gap-1.5 bg-blue-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm hover:bg-blue-700 transition-all shadow-sm">
@@ -330,7 +324,6 @@ $actionStmt->close();
                                 <th class="px-6 py-4 border-b border-slate-200">Action</th>
                                 <th class="px-6 py-4 border-b border-slate-200">Target Entity</th>
                                 <th class="px-6 py-4 border-b border-slate-200">Device/IP</th>
-                                <th class="px-6 py-4 border-b border-slate-200 text-right">Details</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
@@ -393,34 +386,7 @@ $actionStmt->close();
                                         <?php echo htmlspecialchars($log['user_agent'] ?? 'No Agent'); ?>
                                     </p>
                                 </td>
-                                <td class="px-6 py-4 text-right">
-                                    <?php if (!empty($log['action_details'])): ?>
-                                        <button type="button" onclick="toggleDetails(<?php echo (int)$log['activity_id']; ?>)"
-                                            class="inline-flex items-center gap-1 text-xs text-blue-600 font-bold hover:text-blue-800 transition-colors">
-                                            <span id="btnText<?php echo (int)$log['activity_id']; ?>">View</span>
-                                            <span class="material-symbols-outlined text-sm" id="btnIcon<?php echo (int)$log['activity_id']; ?>">expand_more</span>
-                                        </button>
-                                    <?php else: ?>
-                                        <span class="text-slate-300 text-xs">—</span>
-                                    <?php endif; ?>
-                                </td>
                             </tr>
-                            <?php if (!empty($log['action_details'])): ?>
-                            <tr id="detailsRow<?php echo (int)$log['activity_id']; ?>" class="hidden bg-slate-50/50">
-                                <td colspan="6" class="px-6 py-4 border-t border-b border-slate-100">
-                                    <div class="p-4 bg-[#0F172A] rounded-lg border border-slate-800 text-left font-mono text-xs text-blue-300 overflow-x-auto shadow-inner">
-                                        <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
-                                            <span class="text-slate-500 font-bold text-[10px] uppercase tracking-wider">Payload Metadata</span>
-                                            <span class="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded">Activity ID: <?php echo (int)$log['activity_id']; ?></span>
-                                        </div>
-                                        <pre class="whitespace-pre-wrap leading-relaxed"><?php 
-                                            $jsonObj = json_decode($log['action_details']);
-                                            echo htmlspecialchars(json_encode($jsonObj, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-                                        ?></pre>
-                                    </div>
-                                </td>
-                            </tr>
-                            <?php endif; ?>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
@@ -489,25 +455,51 @@ $actionStmt->close();
 </main>
 
 <script>
-    document.getElementById('logout-btn').addEventListener('click', () => {
-        window.location.href = '../logout.php';
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            window.location.href = '../logout.php';
+        });
+    }
+
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    let mobileSidebarOpen = false;
+
+    function applySidebarState() {
+        const isDesktop = window.innerWidth >= 1024;
+        if (isDesktop) {
+            sidebar.classList.remove('-translate-x-full');
+            sidebarOverlay.classList.add('hidden');
+            mobileSidebarOpen = false;
+            sidebarToggle.setAttribute('aria-expanded', 'false');
+            return;
+        }
+
+        sidebar.classList.toggle('-translate-x-full', !mobileSidebarOpen);
+        sidebarOverlay.classList.toggle('hidden', !mobileSidebarOpen);
+        sidebarToggle.setAttribute('aria-expanded', String(mobileSidebarOpen));
+    }
+
+    sidebarToggle.addEventListener('click', () => {
+        mobileSidebarOpen = !mobileSidebarOpen;
+        applySidebarState();
     });
 
-    function toggleDetails(activityId) {
-        const row = document.getElementById('detailsRow' + activityId);
-        const text = document.getElementById('btnText' + activityId);
-        const icon = document.getElementById('btnIcon' + activityId);
+    sidebarOverlay.addEventListener('click', () => {
+        mobileSidebarOpen = false;
+        applySidebarState();
+    });
 
-        if (row.classList.contains('hidden')) {
-            row.classList.remove('hidden');
-            text.textContent = 'Hide';
-            icon.textContent = 'expand_less';
-        } else {
-            row.classList.add('hidden');
-            text.textContent = 'View';
-            icon.textContent = 'expand_more';
+    window.addEventListener('resize', () => {
+        if (window.innerWidth >= 1024) {
+            mobileSidebarOpen = false;
         }
-    }
+        applySidebarState();
+    });
+
+    applySidebarState();
 </script>
 </body>
 </html>

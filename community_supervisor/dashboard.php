@@ -137,10 +137,12 @@ $statsStmt->close();
 </head>
 <body class="text-slate-800">
 
+<div id="sidebarOverlay" class="fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden"></div>
+
 <!-- Sidebar -->
-<aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl">
+<aside id="sidebar" class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl transition-transform duration-300 ease-in-out -translate-x-full lg:translate-x-0 lg:-translate-x-0">
     <div class="p-6 flex items-center gap-3">
-        <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-emerald-400/40 shrink-0">
+        <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-400/40 shrink-0">
             <img src="../assets/images/must_logo.png" alt="MUST Logo" class="w-full h-full object-cover">
         </div>
         <div>
@@ -149,7 +151,7 @@ $statsStmt->close();
         </div>
     </div>
     <nav class="flex-1 px-4 py-4 space-y-1">
-        <a href="dashboard.php" class="flex items-center gap-3 px-4 py-3 bg-emerald-500/10 text-emerald-400 border-l-4 border-emerald-500 font-h3 text-sm">
+        <a href="dashboard.php" class="flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 border-l-4 border-blue-600 font-h3 text-sm">
             <span class="material-symbols-outlined">fact_check</span>
             Moderation Queue
             <?php if ($stats['pending_count'] > 0): ?>
@@ -168,23 +170,20 @@ $statsStmt->close();
 </aside>
 
 <!-- Top Bar -->
-<header class="fixed top-0 right-0 left-[280px] h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-8 z-40 shadow-sm">
-    <div class="flex items-center gap-3">
-        <h2 class="text-slate-900 font-black text-lg font-h2">Moderation Command Center</h2>
-        <span class="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 text-[11px] font-bold uppercase tracking-wider">
-            <span class="w-2 h-2 bg-emerald-500 rounded-full"></span>Supervisor
-        </span>
+<header id="topHeader" class="fixed top-0 right-0 left-0 h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-40 shadow-sm transition-all duration-300 ease-in-out lg:left-[280px] lg:px-8">
+    <div class="flex items-center gap-3 flex-1">
+        <button id="sidebarToggle" type="button" class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-100 hover:text-slate-900 lg:hidden" aria-label="Toggle sidebar">
+            <span class="material-symbols-outlined">menu</span>
+        </button>
+        <h2 class="text-slate-900 font-black text-lg font-h2">Moderation Center</h2>
     </div>
     <div class="flex items-center gap-3">
-        <button class="hover:bg-slate-100 rounded-lg p-2 transition-all">
-            <span class="material-symbols-outlined text-slate-600">notifications</span>
-        </button>
-        <div class="flex items-center gap-3 pl-4 border-l border-slate-200">
+        <div class="flex items-center gap-3">
             <div class="text-right">
                 <p class="font-bold text-slate-900 text-sm font-h3 leading-none"><?php echo htmlspecialchars($supervisor['name']); ?></p>
-                <p class="text-[10px] text-emerald-600 font-bold uppercase"><?php echo htmlspecialchars($supervisorDepartment ?: 'N/A'); ?></p>
+                <p class="text-[10px] text-secondary font-bold uppercase tracking-[0.18em]"><?php echo htmlspecialchars($supervisorDepartment ?: 'N/A'); ?></p>
             </div>
-            <div class="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm">
+            <div class="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold text-sm border-2 border-white shadow-sm">
                 <?php echo strtoupper(substr($supervisor['name'], 0, 1)); ?>
             </div>
         </div>
@@ -192,7 +191,7 @@ $statsStmt->close();
 </header>
 
 <!-- Main Content -->
-<main class="ml-[280px] mt-16 p-8 min-h-screen">
+<main id="mainContent" class="mt-16 p-4 sm:p-6 lg:ml-[280px] lg:mt-16 lg:p-8 min-h-screen transition-all duration-300 ease-in-out">
 
     <!-- Flash Messages -->
     <?php if ($error): ?>
@@ -377,5 +376,53 @@ $statsStmt->close();
         <?php endif; ?>
     </section>
 </main>
+<script>
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const topHeader = document.getElementById('topHeader');
+    const mainContent = document.getElementById('mainContent');
+    let mobileSidebarOpen = false;
+
+    function syncSidebarState() {
+        const isDesktop = window.innerWidth >= 1024;
+
+        if (isDesktop) {
+            sidebar.classList.remove('-translate-x-full');
+            sidebar.classList.add('translate-x-0');
+            sidebarOverlay.classList.add('hidden');
+            topHeader.classList.remove('left-0');
+            topHeader.classList.add('lg:left-[280px]');
+            mainContent.classList.remove('ml-0');
+            return;
+        }
+
+        sidebar.classList.toggle('-translate-x-full', !mobileSidebarOpen);
+        sidebar.classList.toggle('translate-x-0', mobileSidebarOpen);
+        sidebarOverlay.classList.toggle('hidden', !mobileSidebarOpen);
+        topHeader.classList.add('left-0');
+        topHeader.classList.remove('lg:left-[280px]');
+        mainContent.classList.add('ml-0');
+    }
+
+    sidebarToggle.addEventListener('click', () => {
+        mobileSidebarOpen = !mobileSidebarOpen;
+        syncSidebarState();
+    });
+
+    sidebarOverlay.addEventListener('click', () => {
+        mobileSidebarOpen = false;
+        syncSidebarState();
+    });
+
+    window.addEventListener('resize', () => {
+        if (window.innerWidth >= 1024) {
+            mobileSidebarOpen = false;
+        }
+        syncSidebarState();
+    });
+
+    syncSidebarState();
+</script>
 </body>
 </html>

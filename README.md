@@ -1,263 +1,233 @@
 # E-Notice and Communication Compliance System
 
-A comprehensive web-based platform for managing academic notices, class notifications, and compliance across multiple user roles in an academic institution.
+A PHP-based academic communication platform designed for universities and institutions that need role-based notice distribution, approval workflows, email communication, and auditing.
 
 ## Overview
 
-This system enables efficient notification distribution and communication tracking across students, teachers, community supervisors, and administrators. It enforces compliance requirements while maintaining a streamlined user experience for each role.
+The system supports four main roles:
+- Student
+- Teacher
+- Community Supervisor
+- Super Admin
 
-**Key Features:**
-- Role-specific authentication pages (students via roll number, staff via email)
-- Community posts with department/all scopes, optional images, and expiry dates
-- Supervisor moderation workflow for posts (pending/approved/rejected)
-- Course-based notifications sent to enrolled students
-- Email reply flow with message logging for compliance
-- Audit logging with searchable admin reports
-- Bulk student import plus course/offering/assignment management
-- Database-driven architecture with role-based access control
+Each role has a distinct login flow and dashboard, with protected pages enforced by session guards. The project centralizes communication, compliance tracking, and academic record management in one web application.
 
-## System Architecture
+## Core Features
 
-The application follows a role-based access model with dedicated login pages and dashboards. Students authenticate via roll number, while teachers, supervisors, and admins authenticate via email. Sessions store role-specific identity data and guard files protect access to role directories.
+- Student login by roll number and staff login by email
+- Role-based access control through session checks and guard files
+- Course notification delivery to enrolled students
+- Community post creation with department or all-user visibility
+- Supervisor review and moderation workflow for pending posts
+- Email reply flow between students and teachers
+- Bulk student import from Excel, CSV, or ODS files
+- Admin tools for course, offering, and enrollment management
+- Audit trail for login and system activity logging
+- Argon2id password hashing and prepared-statement database queries
 
-**Core Components:**
+## Technology Stack
 
-1. **Authentication & Sessions** — `index.php` handles student login by roll number. `teacher/login.php`, `community_supervisor/login.php`, and `super_admin/login.php` handle staff logins by email. Passwords use Argon2id hashing and login events are written to the audit log.
+- PHP 8+
+- MySQL / MariaDB via MySQLi
+- Tailwind CSS for the UI
+- PHPMailer for SMTP delivery
+- OpenSpout for spreadsheet imports
+- Composer for package management
 
-2. **Role-Specific Modules** — Four main user paths:
-   - **Student** — View course notifications, browse community posts, reply to teachers via email
-   - **Teacher** — Send course notifications to assigned offerings, create community posts
-   - **Community Supervisor** — Approve or reject pending community posts for their department
-   - **Super Admin** — Import students, manage courses/offerings/assignments, review audit logs
+## Project Structure
 
-3. **Community Posts** — Students and teachers create posts with scope (`all` or `department`), optional images, and expiration dates. Posts default to `pending` status and require supervisor approval. Review decisions are stored in `post_reviews`.
-
-4. **Course Notifications** — Teachers send notifications to students enrolled in assigned course offerings. Students can filter notifications by course, date range, and message text.
-
-5. **Email Integration** — `send_email.php` uses PHPMailer with SMTP settings from `email_config.php`/`email_config.local.php`. Student replies are delivered to teachers and stored in the `messages` table.
-
-6. **Audit Logging** — `audit_log.php` captures actions into `activity_logs`. Super admins review logs in `super_admin/audit_logs.php` with filters for role, action, date range, and search.
-
-## Database Schema
-
-The system uses a MySQL/MariaDB database (`project`) with these main tables:
-
-**Identity & Roles**
-- **user** — Authentication, role, email, login timestamps
-- **student**, **teacher**, **community_supervisor**, **super_admin** — Profile and department details
-
-**Academic Structure**
-- **courses** — Course catalog
-- **course_offerings** — Session/semester/section-specific offerings
-- **teacher_course_assignments** — Teacher-to-offering assignments
-- **student_course_enrollments** — Student enrollments per offering
-
-**Communications**
-- **posts** — Community posts with scope, status, and expiry
-- **post_reviews** — Supervisor approvals/rejections
-- **notifications** — Teacher-to-student class notifications
-- **messages** — Logged reply emails
-
-**Compliance**
-- **activity_logs** — Audit trail for logins, notifications, posts, and admin actions
-
-## Configuration
-
-### Database Setup
-
-1. Create a MySQL database named `project`
-2. Import the SQL schema from `DB/project.sql`
-3. Update credentials in `config.php`:
-   ```php
-   $host = 'localhost';
-   $dbname = 'project';
-   $username = 'root';
-   $password = '';
-   ```
-
-### Email Configuration
-
-1. Copy `email_config.local.example.php` to `email_config.local.php`
-2. Set SMTP credentials and sender details, or define environment variables used in `email_config.php`
-3. Optionally configure:
-   - `EMAIL_VALIDATE_STRICT` to enforce domain policy
-   - `EMAIL_BLOCKED_DOMAINS` to block test domains
-
-### Dependencies
-
-Install required packages via Composer:
-```bash
-composer install
+```text
+project/
+├── .gitignore
+├── .htaccess
+├── audit_log.php
+├── composer.json
+├── composer.lock
+├── config.php
+├── email_config.php
+├── email_config.local.example.php
+├── email_config.local.php
+├── index.php
+├── logout.php
+├── send_email.php
+├── js-functions-overview.txt
+├── assets/
+│   └── images/
+│       └── must_logo.png
+├── community_supervisor/
+│   ├── dashboard.php
+│   ├── login.php
+│   ├── settings.php
+│   └── supervisor_guard.php
+├── student/
+│   ├── community.php
+│   ├── dashboard.php
+│   ├── settings.php
+│   └── student_guard.php
+├── super_admin/
+│   ├── audit_logs.php
+│   ├── dashboard.php
+│   ├── login.php
+│   ├── re_enroll.php
+│   ├── settings.php
+│   └── super_admin_guard.php
+├── teacher/
+│   ├── community.php
+│   ├── dashboard.php
+│   ├── login.php
+│   ├── settings.php
+│   └── teacher_guard.php
+├── vendor/
+│   └── ...
+├── Diagram/
+└── README.md
 ```
 
-Packages:
-- **PHPMailer** — SMTP email delivery
-- **OpenSpout** — Excel/CSV/ODS import for student uploads
+The brag-related folders are intentionally not included in the project documentation or source listing.
 
 ## User Roles and Workflows
 
 ### Student
-**Entry Point:** `index.php` → `student/dashboard.php`
+Entry point: index.php -> student/dashboard.php
 
-Students log in with roll number and password. The dashboard provides:
-- Course notifications sent by assigned teachers
-- Filters by course, date range, and message search
-- Community posts approved for their department or all users
-- Reply-to-teacher email workflow
-- Profile and preference settings
+Students can:
+- log in with their roll number
+- view notifications sent by teachers
+- filter notifications by offering, date, or text
+- read approved community posts
+- reply by email to a teacher
+- manage personal settings
 
 ### Teacher
-**Entry Point:** `teacher/login.php` → `teacher/dashboard.php`
+Entry point: teacher/login.php -> teacher/dashboard.php
 
 Teachers can:
-- Send notifications to students enrolled in assigned course offerings
-- Review and delete previously sent notification batches
-- Create community posts with optional image attachments
-- Manage profile settings
+- log in with their email address
+- send notifications to students in assigned offerings
+- create community posts with optional images
+- review existing communication activity
+- manage profile settings
 
 ### Community Supervisor
-**Entry Point:** `community_supervisor/login.php` → `community_supervisor/dashboard.php`
+Entry point: community_supervisor/login.php -> community_supervisor/dashboard.php
 
-Supervisors:
-- Review pending posts scoped to their department
-- Approve or reject posts with an audit trail
-- Track daily approval/rejection counts
-- Manage profile settings
+Supervisors can:
+- review pending posts for their department
+- approve or reject submissions
+- maintain moderation records for compliance
+- manage personal settings
 
 ### Super Admin
-**Entry Point:** `super_admin/login.php` → `super_admin/dashboard.php`
+Entry point: super_admin/login.php -> super_admin/dashboard.php
 
-Admins handle:
-- Bulk student import (Excel/CSV/ODS)
-- Course catalog and offering management
-- Teacher course assignments
-- Student enrollments and re-enrollments (`super_admin/re_enroll.php`)
-- Audit log reporting (`super_admin/audit_logs.php`)
+Admins can:
+- import students through spreadsheet files
+- manage courses, sections, and offerings
+- assign teachers to course offerings
+- enroll and re-enroll students
+- review audit logs and system activity
 
-## File Structure
+## Authentication and Security
 
+The application uses MySQLi prepared statements throughout the project to reduce SQL injection risk. Passwords are stored and validated using Argon2id hashing through helper functions in config.php.
+
+Key security measures include:
+- session-based role checks
+- guard files for protected pages
+- server-side validation for inputs and files
+- email format validation for communication workflows
+- audit logging for user activity and administrative actions
+
+## Email and Communication Flow
+
+The system supports a direct student-to-teacher email reply flow:
+1. A student selects a teacher and enters a message.
+2. The app validates the teacher email and sender data.
+3. PHPMailer sends the message through the configured SMTP settings.
+4. The message is logged in the database for tracking and audit review.
+
+Email configuration is managed through:
+- email_config.php
+- email_config.local.php
+- email_config.local.example.php
+
+## Student Import System
+
+The admin dashboard includes a spreadsheet import workflow for bulk student registration. Supported file types are:
+- .xlsx
+- .csv
+- .ods
+
+The import process validates:
+- email format
+- required fields
+- duplicate email and roll number values
+- department scope restrictions
+- semester number range
+- section format
+
+## Audit Logging
+
+Activity is written through audit_log.php and stored in the database activity log tables. The admin dashboard exposes the log review screens for actions such as:
+- logins
+- notifications
+- community moderation
+- student imports
+- administrative changes
+
+## Configuration
+
+### Database
+
+Update the connection settings in config.php before running the app:
+
+```php
+$host = 'localhost';
+$dbname = 'project';
+$username = 'root';
+$password = '';
 ```
-project/
-├── config.php                  # Database and password hashing utilities
-├── audit_log.php               # Activity log helpers
-├── email_config.php            # SMTP configuration loader
-├── email_config.local.example.php
-├── index.php                   # Student login
-├── send_email.php              # Email sending utilities
-├── logout.php                  # Session cleanup
-├── assets/
-│   └── images/must_logo.png
-├── student/
-│   ├── dashboard.php
-│   ├── community.php
-│   ├── settings.php
-│   └── student_guard.php
-├── teacher/
-│   ├── login.php
-│   ├── dashboard.php
-│   ├── community.php
-│   ├── settings.php
-│   └── teacher_guard.php
-├── community_supervisor/
-│   ├── login.php
-│   ├── dashboard.php
-│   ├── settings.php
-│   └── supervisor_guard.php
-├── super_admin/
-│   ├── login.php
-│   ├── dashboard.php
-│   ├── audit_logs.php
-│   ├── re_enroll.php
-│   └── settings.php
-├── DB/
-│   └── project.sql             # Database schema
-├── composer.json
-├── js-functions-overview.txt
-├── test_db_debug.php
-└── test_logging.php
+
+The application expects a MySQL database named project with the required academic and communication tables.
+
+### Email
+
+Copy email_config.local.example.php to email_config.local.php and configure your SMTP credentials.
+
+### Dependencies
+
+Install composer packages with:
+
+```bash
+composer install
 ```
 
-## Key Workflows
+Required packages:
+- phpmailer/phpmailer
+- openspout/openspout
 
-### Community Post Moderation
+## Usage Notes
 
-1. Student/teacher submits a post with scope and expiration
-2. Post enters `pending` status
-3. Community supervisor reviews and approves/rejects
-4. Approved posts appear in community feeds; expired posts are removed
-
-### Course Notification Broadcast
-
-1. Admin assigns teachers to course offerings and enrolls students
-2. Teacher selects an assigned offering and sends a notification
-3. Notifications are stored per student and surfaced in the student dashboard
-4. Students can filter and reply to teachers via email
-
-### Email Reply Flow
-
-1. Student composes a reply from the dashboard
-2. `sendReplyEmail()` sends mail via SMTP and logs to `messages`
-3. Teachers receive the email and compliance records are retained
-
-### Audit Log Review
-
-1. `logActivity()` writes actions to `activity_logs`
-2. Super admin filters logs by role, action, user, and date range
-
-## Session Management
-
-- **Student sessions:** user_id, role, student_id, roll_number, student_name
-- **Teacher sessions:** user_id, role, teacher_id, teacher_name, teacher_department
-- **Supervisor sessions:** user_id, role, supervisor_id, supervisor_name, supervisor_department
-- **Admin sessions:** user_id, role, super_admin_email
-- Guard files enforce role access for student/teacher/supervisor pages; admin pages validate the `super_admin` role directly.
-
-## Security Features
-
-**Password Security:**
-- Argon2id hashing via `hashPasswordArgon2id()` / `verifyPasswordArgon2id()`
-
-**SQL Injection Prevention:**
-- Prepared statements with parameter binding throughout
-- `prepareAndExecute()` utility for safe queries
-
-**Session Validation:**
-- Guard files verify user identity and role before page access
-
-**Email Validation:**
-- Strict validation with optional blocked domain list
-
-**File Upload Validation:**
-- Community post images are limited to JPG/PNG/GIF under 2MB
-
-**Audit Trail:**
-- Activity logs stored in `activity_logs` for compliance reporting
+- Student login is handled from the main index.php page.
+- Staff portals use separate login pages under their role folders.
+- Access is restricted by role-specific guards and session checks.
+- Global functions for hashing, database execution, and auditing are centralized in config.php and audit_log.php.
 
 ## Development Notes
 
-### Creating Community Posts
+This project is a custom PHP web system rather than a framework-based app. Most logic is organized by role folder, with shared utilities kept at the project root. For design changes, the main front-end styling is handled with Tailwind utility classes embedded in each page.
 
-Community posts are stored in `posts` with `scope`, `status`, and `expires_at`. New posts default to `pending` and are approved by community supervisors.
+## Future Maintenance
 
-### Sending Course Notifications
+When updating the system, keep these areas aligned:
+- role/session logic in the guard files
+- database queries and schema assumptions in config.php and dashboard pages
+- SMTP settings in the email configuration files
+- import validation rules in super_admin/dashboard.php
+- audit log behavior in audit_log.php
 
-Notifications are created in `notifications` with an `offering_id`. Ensure teachers are assigned to offerings and students are enrolled before sending.
+This project is intended for academic administration workflows and compliance tracking, with the current implementation focused on notice delivery, moderation, enrollment management, and activity logging.
 
-### Modifying Email Templates
-
-Edit the HTML layout in `student/dashboard.php` (reply template) or adjust `send_email.php` for shared formatting.
-
-### Extending Roles
-
-To add a new role:
-1. Add a role value to the `user` table
-2. Create a new directory with login, dashboard, guard, and settings pages
-3. Add navigation links from `index.php` or the role switcher
-4. Implement guard checks similar to existing role guards
-
-## Troubleshooting
-
-**"Connected successfully" message on every page:**
 Remove or comment out the debug echo in `config.php` line 18:
 ```php
 // echo "Connected successfully";

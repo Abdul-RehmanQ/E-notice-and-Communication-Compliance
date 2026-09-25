@@ -161,8 +161,9 @@ if ($searchTerm !== '') {
 </head>
 <body class="text-slate-800">
 
-<!-- ── Sidebar ── -->
-<aside class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl">
+<div id="sidebarOverlay" class="fixed inset-0 bg-slate-900/50 z-40 hidden lg:hidden"></div>
+
+<aside id="sidebar" class="fixed left-0 top-0 w-[280px] h-full bg-[#0F172A] border-r border-slate-800 flex flex-col z-50 shadow-xl transition-transform duration-300 ease-in-out -translate-x-full lg:translate-x-0 lg:-translate-x-0">
     <div class="p-6 flex items-center gap-3">
         <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-400/40 shrink-0">
             <img src="../assets/images/must_logo.png" alt="MUST Logo" class="w-full h-full object-cover">
@@ -193,13 +194,12 @@ if ($searchTerm !== '') {
     </div>
 </aside>
 
-<!-- ── Top Bar ── -->
-<header class="fixed top-0 right-0 left-[280px] h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-8 z-40 shadow-sm">
-    <div class="flex items-center gap-3">
+<header id="topHeader" class="fixed top-0 right-0 left-0 h-16 bg-[#F8FAFC] border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-40 shadow-sm transition-all duration-300 ease-in-out lg:left-[280px] lg:px-8">
+    <div class="flex items-center gap-3 flex-1">
+        <button id="sidebarToggle" type="button" class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-100 hover:text-slate-900 lg:hidden" aria-label="Toggle sidebar">
+            <span class="material-symbols-outlined">menu</span>
+        </button>
         <h2 class="text-slate-900 font-black text-lg font-sora">Re-enroll Search</h2>
-        <span class="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-full border border-blue-100 text-[11px] font-bold uppercase tracking-wider">
-            <span class="w-2 h-2 bg-blue-500 rounded-full"></span>Super Admin
-        </span>
     </div>
     <div class="flex items-center gap-3">
         <div class="text-right">
@@ -212,8 +212,7 @@ if ($searchTerm !== '') {
     </div>
 </header>
 
-<!-- ── Main Content ── -->
-<main class="ml-[280px] mt-16 p-6 min-h-screen">
+<main id="mainContent" class="mt-16 p-4 sm:p-6 lg:ml-[280px] lg:mt-16 min-h-screen transition-all duration-300 ease-in-out">
     <div class="max-w-5xl mx-auto space-y-6">
 
         <!-- Breadcrumb -->
@@ -372,9 +371,51 @@ if ($searchTerm !== '') {
 </main>
 
 <script>
-    document.getElementById('logout-btn').addEventListener('click', () => {
-        window.location.href = '../logout.php';
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            window.location.href = '../logout.php';
+        });
+    }
+
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    let mobileSidebarOpen = false;
+
+    function applySidebarState() {
+        const isDesktop = window.innerWidth >= 1024;
+        if (isDesktop) {
+            sidebar.classList.remove('-translate-x-full');
+            sidebarOverlay.classList.add('hidden');
+            mobileSidebarOpen = false;
+            sidebarToggle.setAttribute('aria-expanded', 'false');
+            return;
+        }
+
+        sidebar.classList.toggle('-translate-x-full', !mobileSidebarOpen);
+        sidebarOverlay.classList.toggle('hidden', !mobileSidebarOpen);
+        sidebarToggle.setAttribute('aria-expanded', String(mobileSidebarOpen));
+    }
+
+    sidebarToggle.addEventListener('click', () => {
+        mobileSidebarOpen = !mobileSidebarOpen;
+        applySidebarState();
     });
+
+    sidebarOverlay.addEventListener('click', () => {
+        mobileSidebarOpen = false;
+        applySidebarState();
+    });
+
+    window.addEventListener('resize', () => {
+        if (window.innerWidth >= 1024) {
+            mobileSidebarOpen = false;
+        }
+        applySidebarState();
+    });
+
+    applySidebarState();
 </script>
 </body>
 </html>
